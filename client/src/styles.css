@@ -173,4 +173,6 @@
 
 .packing-list-controls{display:flex;align-items:center;gap:8px}.packing-list-controls>strong{padding:6px 10px;border-radius:999px;background:#171714;color:#fff}.packing-list-controls>button{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border:1px solid #c9c6ba;border-radius:7px;background:#fff;font-size:12px}
 
+.packing-item-filters{display:grid;gap:10px;margin:16px 0}.packing-item-filters>div{display:grid;grid-template-columns:85px 1fr;align-items:center;gap:9px}.packing-item-filters>div>span{color:#777;font-size:11px;font-weight:700;text-transform:uppercase}
+
 .card-image{position:relative}.compatibility-count{position:absolute;top:9px;left:9px;display:inline-flex;align-items:center;gap:4px;min-width:31px;padding:5px 7px;border-radius:999px;background:#171714dd;color:#fff;font-size:12px;font-weight:700;line-height:1;box-shadow:0 3px 10px #0003;backdrop-filter:blur(5px)}
