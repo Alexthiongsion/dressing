@@ -6,7 +6,7 @@ category: {
   type: String,
   trim: true,
   default: "",
-  enum: ["", "Haut", "Bas", "Robe/Combinaison", "Chaussures", "Accessoire", "Manteau"]
+  enum: ["", "Haut", "Bas", "Inter", "Chaussures", "Accessoire", "Manteau"]
 },
   brand: { type: String, trim: true, default: "" },
   color: { type: String, trim: true, default: "" },
@@ -15,6 +15,8 @@ category: {
   size: { type: String, trim: true, default: "" },
   imageUrl: { type: String, trim: true, default: "" },
   favorite: { type: Boolean, default: false },
+  compatibleWith: [{ type: mongoose.Schema.Types.ObjectId, ref: "Clothing" }],
+  compatibilityConfigured: { type: Boolean, default: false },
   available: { type: Boolean, default: true },
   wornCount: { type: Number, default: 0, min: 0 },
   lastWornAt: Date

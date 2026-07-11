@@ -5,7 +5,6 @@ import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Wardrobe from "./pages/Wardrobe";
 import Outfits from "./pages/Outfits";
-import Collections from "./pages/Collections";
 import { api, uploadImage } from "./services/api";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
@@ -54,6 +53,12 @@ export default function App() {
   const [processing, setProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState("");
   const [notification, setNotification] = useState("");
+
+  const showNotification = (message) => {
+    setNotification(message);
+    window.clearTimeout(window.wearsenseNotificationTimer);
+    window.wearsenseNotificationTimer = window.setTimeout(() => setNotification(""), 3000);
+  };
 
   useEffect(() => {
     let dragCounter = 0;
@@ -174,16 +179,6 @@ export default function App() {
   }
 };
 
-    const showNotification = (message) => {
-      setNotification(message);
-
-      window.clearTimeout(window.wearsenseNotificationTimer);
-
-      window.wearsenseNotificationTimer = window.setTimeout(() => {
-        setNotification("");
-      }, 3000);
-    };
-
     window.addEventListener("dragenter", handleDragEnter);
     window.addEventListener("dragleave", handleDragLeave);
     window.addEventListener("dragover", handleDragOver);
@@ -205,7 +200,6 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="wardrobe" element={<Wardrobe />} />
             <Route path="outfits" element={<Outfits />} />
-            <Route path="collections" element={<Collections />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Route>
         </Routes>
