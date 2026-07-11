@@ -1,0 +1,20 @@
+{
+  "name": "wearsense-client",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "*",
+    "vite": "*",
+    "react": "*",
+    "react-dom": "*",
+    "react-router": "*",
+    "lucide-react": "*",
+    "@imgly/background-removal": "^1.7.0"
+  },
+  "devDependencies": {}
+}

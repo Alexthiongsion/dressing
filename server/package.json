@@ -1,0 +1,19 @@
+{
+  "name": "wearsense-server",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "*",
+    "cors": "*",
+    "dotenv": "*",
+    "express": "*",
+    "helmet": "*",
+    "jsonwebtoken": "*",
+    "mongoose": "*",
+    "morgan": "*",
+    "multer": "^2.0.2"
+  }
+}
