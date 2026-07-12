@@ -5,6 +5,7 @@ const schema = new mongoose.Schema({
   occasion: { type: String, trim: true, default: "" },
   season: { type: String, trim: true, default: "" },
   notes: { type: String, trim: true, default: "" },
+  rating: { type: Number, min: 0, max: 5, default: 0 },
   favorite: { type: Boolean, default: false }
 }, { timestamps: true });
 export default mongoose.model("Outfit", schema);

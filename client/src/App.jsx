@@ -5,6 +5,10 @@ import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Wardrobe from "./pages/Wardrobe";
 import Outfits from "./pages/Outfits";
+import Capsules from "./pages/Capsules";
+import OutfitCreate from "./pages/OutfitCreate";
+import OutfitMultiCreate from "./pages/OutfitMultiCreate";
+import CapsuleCreate from "./pages/CapsuleCreate";
 import { api, uploadImage } from "./services/api";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
@@ -200,6 +204,10 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="wardrobe" element={<Wardrobe />} />
             <Route path="outfits" element={<Outfits />} />
+            <Route path="outfits/new" element={<OutfitCreate />} />
+            <Route path="outfits/new/multiple" element={<OutfitMultiCreate />} />
+            <Route path="capsules" element={<Capsules />} />
+            <Route path="capsules/new" element={<CapsuleCreate />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Route>
         </Routes>
