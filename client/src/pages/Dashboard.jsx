@@ -3,10 +3,20 @@ import { ArrowRight, Layers3, Luggage, Plus, Sparkles } from "lucide-react";
 import { Link } from "react-router";
 import { api } from "../services/api";
 import WeatherForecast from "../components/WeatherForecast";
+import PageState from "../components/PageState";
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
-  useEffect(() => { api("/dashboard").then(setData); }, []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const loadDashboard = async () => {
+    setLoading(true);
+    setError("");
+    try { setData(await api("/dashboard")); }
+    catch (err) { setError(err.message || "Impossible de charger votre dressing."); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { loadDashboard(); }, []);
 
   const date = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
 
@@ -24,11 +34,11 @@ export default function Dashboard() {
 
     <WeatherForecast/>
 
-    {!data ? <div className="dashboard-loading">Chargement de votre dressing…</div> : <>
+    {loading ? <PageState loading title="Chargement de votre dressing…"/> : error ? <PageState title="Votre dressing n’a pas pu être chargé" message="Vérifiez la connexion au serveur puis réessayez." onAction={loadDashboard}/> : data ? <>
       <section className="dashboard-recent">
         <header><h2>Dernières pièces</h2><Link to="/wardrobe">Tout voir <ArrowRight size={16}/></Link></header>
         {data.recentClothes.length ? <div>{data.recentClothes.map(item => <Link className="dashboard-recent-card" to="/wardrobe" key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt={item.name || item.category}/> : <span/>}<footer><b>{item.name || item.category}</b><small>{item.category}</small></footer></Link>)}</div> : <p className="dashboard-empty">Ajoutez votre première pièce pour la retrouver ici.</p>}
       </section>
-    </>}
+    </> : null}
   </div>;
 }
