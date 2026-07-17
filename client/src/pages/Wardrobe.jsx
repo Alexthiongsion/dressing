@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowDownWideNarrow, FolderPlus, LoaderCircle, Luggage, Network, Plus, Tags } from "lucide-react";
+import { FolderPlus, LoaderCircle, Luggage, MoreHorizontal, Network, Plus, RotateCcw, Tags } from "lucide-react";
 import { api, uploadImage } from "../services/api";
 import ClothingCard from "../components/ClothingCard";
 import ImageDropzone from "../components/ImageDropzone";
@@ -21,12 +21,17 @@ export default function Wardrobe() {
   const [collectionCandidates, setCollectionCandidates] = useState([]);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [compatibilityItems, setCompatibilityItems] = useState([]);
+  const [compatibilityTarget, setCompatibilityTarget] = useState(null);
+  const [compatibilityCatalog, setCompatibilityCatalog] = useState([]);
+  const [loadingCompatibilityList, setLoadingCompatibilityList] = useState(false);
   const [showCompatibilityWizard, setShowCompatibilityWizard] = useState(false);
   const [sortByCompatibility, setSortByCompatibility] = useState(false);
+  const [sortByLeastCompatibility, setSortByLeastCompatibility] = useState(false);
   const [capsuleItems, setCapsuleItems] = useState([]);
   const [showCapsuleWizard, setShowCapsuleWizard] = useState(false);
   const [imageFile, setImageFile] = useState(undefined);
   const [saving, setSaving] = useState(false);
+  const [seasonSaving, setSeasonSaving] = useState(false);
   const [error, setError] = useState("");
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const unclassifiedItems = items.filter(item => !item.category || !item.season?.length);
@@ -62,6 +67,7 @@ useEffect(() => {
 
   const openCompatibilityWizard = async () => {
     setError("");
+    setCompatibilityTarget(null);
     try {
       const allItems = await api("/clothes");
       setCompatibilityItems(allItems);
@@ -69,6 +75,20 @@ useEffect(() => {
         window.alert("Toutes les pièces ont déjà été configurées.");
         return;
       }
+      setShowCompatibilityWizard(true);
+    } catch (err) { setError(err.message); }
+  };
+
+  const redoCompatibility = async () => {
+    const target = editing;
+    if (!target?._id) return;
+    setError("");
+    try {
+      const allItems = compatibilityCatalog.length ? compatibilityCatalog : await api("/clothes");
+      const freshTarget = allItems.find(item => item._id === target._id) || target;
+      setCompatibilityItems(allItems);
+      setCompatibilityTarget(freshTarget);
+      setEditing(null);
       setShowCompatibilityWizard(true);
     } catch (err) { setError(err.message); }
   };
@@ -93,7 +113,33 @@ useEffect(() => {
     finally { setSaving(false); }
   };
 
-  const openEditor = item => { setEditing(item); setImageFile(undefined); setError(""); };
+  const openEditor = item => {
+    setEditing(item);
+    setImageFile(undefined);
+    setError("");
+    setCompatibilityCatalog([]);
+    if (!item._id) return;
+    setLoadingCompatibilityList(true);
+    api("/clothes")
+      .then(setCompatibilityCatalog)
+      .catch(err => setError(err.message))
+      .finally(() => setLoadingCompatibilityList(false));
+  };
+  const toggleEditingSeason = async season => {
+    if (!editing?._id || seasonSaving) return;
+    const previousSeasons = editing.season || [];
+    const nextSeasons = previousSeasons.includes(season) ? previousSeasons.filter(value => value !== season) : [...previousSeasons, season];
+    setEditing(current => ({ ...current, season: nextSeasons }));
+    setSeasonSaving(true);
+    setError("");
+    try {
+      await api(`/clothes/${editing._id}`, { method: "PUT", body: JSON.stringify({ season: nextSeasons }) });
+      setItems(current => current.map(item => item._id === editing._id ? { ...item, season: nextSeasons } : item));
+    } catch (err) {
+      setEditing(current => ({ ...current, season: previousSeasons }));
+      setError(err.message);
+    } finally { setSeasonSaving(false); }
+  };
   const save=async e=>{
     e.preventDefault(); setSaving(true); setError("");
     try {
@@ -113,9 +159,12 @@ useEffect(() => {
 
   const displayedItems = items
     .filter(item => !selectedCollections.length || selectedCollections.some(collectionId => collections.find(collection => collection._id === collectionId)?.clothes.some(clothing => (clothing._id || clothing) === item._id)))
-    .sort((a, b) => sortByCompatibility ? (b.compatibleWith?.length || 0) - (a.compatibleWith?.length || 0) : 0);
+    .sort((a, b) => sortByCompatibility ? (b.compatibleWith?.length || 0) - (a.compatibleWith?.length || 0) : sortByLeastCompatibility ? (a.compatibleWith?.length || 0) - (b.compatibleWith?.length || 0) : 0);
 
-  return <><header className="page-header"><div><span className="eyebrow">Inventaire</span><h1>Garde-robe</h1></div><div className="page-actions">{unclassifiedItems.length > 0 && <button className="secondary" onClick={()=>setShowSetupWizard(true)}><Tags size={18}/> Classer les imports <span>{unclassifiedItems.length}</span></button>}<button className={`secondary ${sortByCompatibility ? "active" : ""}`} aria-pressed={sortByCompatibility} onClick={()=>setSortByCompatibility(value=>!value)}><ArrowDownWideNarrow size={18}/> Plus compatibles</button><button className="secondary" onClick={openCompatibilityWizard}><Network size={18}/> Compatibilités</button><button className="secondary" onClick={openCapsuleWizard}><Luggage size={18}/> Capsule bagage</button><button className="primary" onClick={()=>openEditor(empty)}><Plus size={18}/> Ajouter</button></div></header>
+  const compatibleIds = new Set((editing?.compatibleWith || []).map(value => value._id || value));
+  const compatibleItems = compatibilityCatalog.filter(item => compatibleIds.has(item._id));
+
+  return <><header className="page-header wardrobe-header"><div><h1>Garde-robe</h1><span className="page-count">{displayedItems.length} pièce{displayedItems.length > 1 ? "s" : ""}</span></div><button className="primary" onClick={()=>openEditor(empty)}><Plus size={18}/> Ajouter</button></header>
   <div className="wardrobe-filters">
     <div className="filter-group">
       <span>Catégories</span>
@@ -131,20 +180,26 @@ useEffect(() => {
         {seasons.map(x=><button type="button" key={x} className={selectedSeasons.includes(x) ? "active" : ""} aria-pressed={selectedSeasons.includes(x)} onClick={()=>toggleFilter(x, setSelectedSeasons)}>{x}</button>)}
       </div>
     </div>
-    <div className="filter-group">
-      <span>Collections</span>
-      <div className="collection-filter-row">
-        <div className="category-pills" aria-label="Filtrer par collection">
-          <button type="button" className={!selectedCollections.length ? "active" : ""} aria-pressed={!selectedCollections.length} onClick={()=>setSelectedCollections([])}>Toutes</button>
-          {collections.map(collection=><button type="button" key={collection._id} className={selectedCollections.includes(collection._id) ? "active" : ""} aria-pressed={selectedCollections.includes(collection._id)} onClick={()=>toggleFilter(collection._id, setSelectedCollections)}>{collection.name}</button>)}
-        </div>
-        <button type="button" className="add-collection-button" onClick={openCollectionModal}><FolderPlus size={16}/> Ajouter une collection</button>
+    <label className="wardrobe-sort">Trier
+      <select value={sortByCompatibility ? "most" : sortByLeastCompatibility ? "least" : "recent"} onChange={event => { setSortByCompatibility(event.target.value === "most"); setSortByLeastCompatibility(event.target.value === "least"); }}>
+        <option value="recent">Récents</option>
+        <option value="most">Plus compatibles</option>
+        <option value="least">Moins compatibles</option>
+      </select>
+    </label>
+    <details className="wardrobe-more">
+      <summary aria-label="Plus d’actions" title="Plus d’actions"><MoreHorizontal size={20}/></summary>
+      <div>
+        {unclassifiedItems.length > 0 && <button type="button" onClick={()=>setShowSetupWizard(true)}><Tags size={17}/> Classer les imports <span>{unclassifiedItems.length}</span></button>}
+        <button type="button" onClick={openCompatibilityWizard}><Network size={17}/> Compatibilités</button>
+        <button type="button" onClick={openCapsuleWizard}><Luggage size={17}/> Capsule bagage</button>
+        <button type="button" onClick={openCollectionModal}><FolderPlus size={17}/> Ajouter une collection</button>
       </div>
-    </div>
+    </details>
   </div>
   <div className="cards-grid">{displayedItems.map(item=><ClothingCard key={item._id} item={item} onEdit={openEditor} onDelete={remove} onFavorite={favorite}/>)}</div>
   {showSetupWizard && unclassifiedItems.length > 0 && <ItemSetupWizard items={unclassifiedItems} onClose={()=>{setShowSetupWizard(false);load();}} onComplete={()=>{setShowSetupWizard(false);load();}}/>}
-  {showCompatibilityWizard && compatibilityItems.length > 0 && <CompatibilityWizard items={compatibilityItems.filter(item => !item.compatibilityConfigured)} allItems={compatibilityItems} onClose={()=>{setShowCompatibilityWizard(false);load();}} onComplete={()=>{setShowCompatibilityWizard(false);load();}}/>}
+  {showCompatibilityWizard && compatibilityItems.length > 0 && <CompatibilityWizard items={compatibilityTarget ? [compatibilityTarget] : compatibilityItems.filter(item => !item.compatibilityConfigured)} allItems={compatibilityItems} onClose={()=>{setShowCompatibilityWizard(false);setCompatibilityTarget(null);load();}} onComplete={()=>{setShowCompatibilityWizard(false);setCompatibilityTarget(null);load();}}/>}
   {showCapsuleWizard && capsuleItems.length > 0 && <CapsuleWizard items={capsuleItems} onClose={()=>setShowCapsuleWizard(false)} onComplete={()=>{setShowCapsuleWizard(false);load();}}/>}
   {showCollectionModal&&<Modal title="Ajouter une collection" onClose={()=>setShowCollectionModal(false)}><form className="stack" onSubmit={createCollection}>
     <label>Nom<input name="name" required autoFocus placeholder="Ex. Travail, Vacances…"/></label>
@@ -152,14 +207,21 @@ useEffect(() => {
     {error&&<p className="field-error">{error}</p>}
     <button className="primary" disabled={saving}>{saving&&<LoaderCircle className="spin" size={18}/>} {saving?"Création…":"Créer la collection"}</button>
   </form></Modal>}
-  {editing&&<Modal title={editing._id?"Modifier le vêtement":"Ajouter un vêtement"} onClose={()=>setEditing(null)}><form className="form-grid" onSubmit={save}>
-    <ImageDropzone initialUrl={editing.imageUrl} onChange={setImageFile}/>
-    <label>Nom<input name="name" defaultValue={editing.name} /></label><label>Catégorie<select name="category" defaultValue={editing.category}>{categories.map(x=><option key={x}>{x}</option>)}</select></label><label>Marque<input name="brand" defaultValue={editing.brand}/></label><label>Couleur<input name="color" defaultValue={editing.color}/></label><label>Style<input name="style" defaultValue={editing.style}/></label><label>Taille<input name="size" defaultValue={editing.size}/></label>
-    <fieldset className="full"><legend>Saisons</legend>{seasons.map(x=><label className="check" key={x}><input type="checkbox" name="season" value={x} defaultChecked={editing.season?.includes(x)}/>{x}</label>)}</fieldset>
+  {editing&&<Modal title={editing._id?(editing.name || editing.category || "Vêtement"):"Ajouter un vêtement"} onClose={()=>setEditing(null)}><form className={`form-grid ${editing._id ? "clothing-details-form" : ""}`} onSubmit={save}>
+    {editing._id ? <section className="clothing-details-summary full">
+      {editing.imageUrl ? <img src={editing.imageUrl} alt={editing.name || editing.category}/> : <span/>}
+      <div><span className="eyebrow">{editing.category}</span><h3>{editing.name || editing.category}</h3>{[editing.brand, editing.color, editing.style, editing.size].filter(Boolean).length > 0 && <p>{[editing.brand, editing.color, editing.style, editing.size].filter(Boolean).join(" · ")}</p>}</div>
+    </section> : <><ImageDropzone initialUrl={editing.imageUrl} onChange={setImageFile}/>
+    <label>Nom<input name="name" defaultValue={editing.name} /></label><label>Catégorie<select name="category" defaultValue={editing.category}>{categories.map(x=><option key={x}>{x}</option>)}</select></label><label>Marque<input name="brand" defaultValue={editing.brand}/></label><label>Couleur<input name="color" defaultValue={editing.color}/></label><label>Style<input name="style" defaultValue={editing.style}/></label><label>Taille<input name="size" defaultValue={editing.size}/></label></>}
+    <fieldset className="full"><legend>Saisons {editing._id && seasonSaving && <small>Enregistrement…</small>}</legend>{seasons.map(x=><label className="check" key={x}><input type="checkbox" name="season" value={x} checked={editing._id ? editing.season?.includes(x) : undefined} defaultChecked={editing._id ? undefined : editing.season?.includes(x)} disabled={editing._id && seasonSaving} onChange={editing._id ? ()=>toggleEditingSeason(x) : undefined}/>{x}</label>)}</fieldset>
+    {editing._id && <section className="clothing-compatibility-list full" aria-labelledby="clothing-compatibility-title">
+      <header><div><Network size={18}/><h3 id="clothing-compatibility-title">Pièces compatibles</h3></div><div className="compatibility-list-actions"><strong>{editing.compatibleWith?.length || 0}</strong><button type="button" onClick={redoCompatibility}><RotateCcw size={15}/> Refaire les compatibilités</button></div></header>
+      {loadingCompatibilityList ? <p className="compatibility-list-status"><LoaderCircle className="spin" size={18}/> Chargement…</p> : compatibleItems.length ? <div>{compatibleItems.map(item => <article key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt={item.name || item.category}/> : <span/>}<footer><b>{item.name || item.category}</b><small>{item.category}</small></footer></article>)}</div> : <p className="compatibility-list-status">Aucune pièce compatible renseignée.</p>}
+    </section>}
     {error && <p className="field-error full">{error}</p>}
-    <button className="primary full" type="submit" disabled={saving} aria-busy={saving}>
+    {!editing._id && <button className="primary full" type="submit" disabled={saving} aria-busy={saving}>
       {saving && <LoaderCircle className="spin" size={18} aria-hidden="true" />}
-      {saving ? (editing._id ? "Modification en cours…" : "Traitement et ajout en cours…") : "Enregistrer"}
-    </button>
+      {saving ? "Traitement et ajout en cours…" : "Enregistrer"}
+    </button>}
   </form></Modal>}</>;
 }

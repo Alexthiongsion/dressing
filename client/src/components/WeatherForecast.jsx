@@ -36,6 +36,7 @@ export default function WeatherForecast() {
           latitude: coords.latitude.toFixed(4),
           longitude: coords.longitude.toFixed(4),
           current: "temperature_2m,apparent_temperature,weather_code",
+          hourly: "temperature_2m,apparent_temperature,precipitation_probability,weather_code",
           daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
           timezone: "auto",
           forecast_days: "7",
@@ -61,10 +62,21 @@ export default function WeatherForecast() {
     min: Math.round(weather.daily.temperature_2m_min[index]),
     rain: weather.daily.precipitation_probability_max[index],
   })) || [];
+  const todayHours = weather?.hourly?.time?.map((time, index) => ({
+    time,
+    hour: `${time.slice(11, 13)}h`,
+    temperature: Math.round(weather.hourly.temperature_2m[index]),
+    apparent: Math.round(weather.hourly.apparent_temperature[index]),
+    rain: weather.hourly.precipitation_probability[index],
+    code: weather.hourly.weather_code[index],
+  })).filter(value => value.time.startsWith(weather.daily.time[0])) || [];
+  const minimumHour = todayHours.reduce((minimum, value) => !minimum || value.temperature < minimum.temperature ? value : minimum, null);
+  const maximumHour = todayHours.reduce((maximum, value) => !maximum || value.temperature > maximum.temperature ? value : maximum, null);
+  const hourlyHighlights = todayHours.filter((_, index) => index % 3 === 0).slice(2, 8);
 
   return <section className="weather-panel">
     <header className="weather-header">
-      <div><span className="eyebrow">Autour de vous</span><h2>Météo locale</h2></div>
+      <h2>Météo locale</h2>
       <div className="weather-ranges" aria-label="Période des prévisions">{ranges.map(([value, label]) => <button type="button" key={value} className={range === value ? "active" : ""} aria-pressed={range === value} onClick={() => setRange(value)}>{label}</button>)}</div>
     </header>
 
@@ -72,11 +84,15 @@ export default function WeatherForecast() {
     {!loading && error && <div className="weather-message weather-error"><LocateFixed size={20}/><span>{error}</span><button type="button" onClick={() => setRequestId(value => value + 1)}>Réessayer</button></div>}
     {!loading && weather && <>
       <div className="weather-current"><strong>{Math.round(weather.current.temperature_2m)}°</strong><div><b>{condition(weather.current.weather_code)[0]}</b><span>Ressenti {Math.round(weather.current.apparent_temperature)}°</span></div></div>
-      <div className={`weather-days range-${range}`}>{days.map((day, index) => {
+      {range === 1 && <div className="weather-today-details">
+        <div className="weather-extremes"><span><small>Minimum</small><b>{minimumHour?.temperature}°</b><em>à {minimumHour?.hour}</em></span><span><small>Maximum</small><b>{maximumHour?.temperature}°</b><em>à {maximumHour?.hour}</em></span></div>
+        <div className="weather-hourly" aria-label="Températures heure par heure">{hourlyHighlights.map(hour => { const Icon = condition(hour.code)[1]; return <span key={hour.time}><small>{hour.hour}</small><Icon size={16}/><b>{hour.temperature}°</b><em>{hour.rain}%</em></span>; })}</div>
+      </div>}
+      {range > 1 && <div className={`weather-days range-${range}`}>{days.map((day, index) => {
         const [label, Icon] = condition(day.code);
         const dateLabel = index === 0 ? "Aujourd’hui" : new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric" }).format(new Date(`${day.date}T12:00:00`));
         return <article key={day.date}><span>{dateLabel}</span><Icon size={25}/><b>{day.max}° <small>{day.min}°</small></b><em>{label} · {day.rain}% pluie</em></article>;
-      })}</div>
+      })}</div>}
     </>}
   </section>;
 }

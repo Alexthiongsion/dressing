@@ -8,7 +8,9 @@ import Outfits from "./pages/Outfits";
 import Capsules from "./pages/Capsules";
 import OutfitCreate from "./pages/OutfitCreate";
 import OutfitMultiCreate from "./pages/OutfitMultiCreate";
+import OutfitAssist from "./pages/OutfitAssist";
 import CapsuleCreate from "./pages/CapsuleCreate";
+import Settings from "./pages/Settings";
 import { api, uploadImage } from "./services/api";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
@@ -206,8 +208,11 @@ export default function App() {
             <Route path="outfits" element={<Outfits />} />
             <Route path="outfits/new" element={<OutfitCreate />} />
             <Route path="outfits/new/multiple" element={<OutfitMultiCreate />} />
+            <Route path="outfits/assist" element={<OutfitAssist />} />
             <Route path="capsules" element={<Capsules />} />
+            <Route path="capsules/:capsuleId" element={<Capsules />} />
             <Route path="capsules/new" element={<CapsuleCreate />} />
+            <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Route>
         </Routes>
