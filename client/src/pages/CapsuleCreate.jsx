@@ -42,12 +42,14 @@ const countPossibleOutfits = items => {
 
 function DestinationField({ destination, index, canRemove, recentLocations, onChange, onRemove }) {
   const [locations, setLocations] = useState([]);
+  const [locationFieldOpen, setLocationFieldOpen] = useState(false);
   const departureRef = useRef(null);
   const openDeparturePicker = () => {
     departureRef.current?.focus();
     try { departureRef.current?.showPicker?.(); } catch { /* Le focus reste actif si le navigateur bloque l'ouverture native. */ }
   };
   useEffect(() => {
+    if (!locationFieldOpen) { setLocations([]); return undefined; }
     if (destination.destination && destination.query === destination.destination) { setLocations([]); return undefined; }
     const query = destination.query?.trim() || "";
     const matchingRecent = recentLocations.filter(location => !query || location.label.toLocaleLowerCase("fr").includes(query.toLocaleLowerCase("fr"))).slice(0, 6);
@@ -57,10 +59,10 @@ function DestinationField({ destination, index, canRemove, recentLocations, onCh
       setLocations([...matchingRecent, ...remote].filter((location, locationIndex, values) => values.findIndex(value => value.label === location.label && value.latitude === location.latitude && value.longitude === location.longitude) === locationIndex).slice(0, 8));
     }).catch(() => setLocations(matchingRecent)), 300);
     return () => clearTimeout(timer);
-  }, [destination.query, destination.destination, recentLocations]);
+  }, [destination.query, destination.destination, recentLocations, locationFieldOpen]);
   return <div className="travel-destination-row">
     <strong>{index + 1}</strong>
-    <label>Destination<div className="location-search"><input value={destination.query} onFocus={() => { if (!destination.query || destination.query === destination.destination) setLocations(recentLocations); }} onChange={event => onChange({ ...destination, query: event.target.value, destination: "", latitude: null, longitude: null })} placeholder={index ? "Ex. Rome" : "Ex. Lisbonne"}/>{locations.length > 0 && <div>{locations.map(location => <button type="button" key={`${location.id}-${location.latitude}-${location.longitude}`} onMouseDown={event => event.preventDefault()} onClick={() => { onChange({ ...destination, query: location.label, destination: location.label, latitude: location.latitude, longitude: location.longitude, timezone: location.timezone || "auto" }); setLocations([]); }}>{location.name || location.label}<small>{location.recent ? "Destination déjà utilisée" : `${location.admin1 ? `${location.admin1}, ` : ""}${location.country}`}</small></button>)}</div>}</div></label>
+    <label>Destination<div className="location-search"><input value={destination.query} onFocus={() => setLocationFieldOpen(true)} onBlur={() => setLocationFieldOpen(false)} onChange={event => onChange({ ...destination, query: event.target.value, destination: "", latitude: null, longitude: null })} placeholder={index ? "Ex. Rome" : "Ex. Lisbonne"}/>{locationFieldOpen && locations.length > 0 && <div>{locations.map(location => <button type="button" key={`${location.id}-${location.latitude}-${location.longitude}`} onMouseDown={event => event.preventDefault()} onClick={() => { onChange({ ...destination, query: location.label, destination: location.label, latitude: location.latitude, longitude: location.longitude, timezone: location.timezone || "auto" }); setLocationFieldOpen(false); setLocations([]); }}>{location.name || location.label}<small>{location.recent ? "Destination déjà utilisée" : `${location.admin1 ? `${location.admin1}, ` : ""}${location.country}`}</small></button>)}</div>}</div></label>
     <label>Arrivée<input type="date" value={destination.startDate} onClick={showDatePicker} onChange={event => { const nextDate = event.target.value; if (!nextDate || nextDate === destination.startDate) return; onChange({ ...destination, startDate: nextDate }); requestAnimationFrame(openDeparturePicker); }}/></label>
     <label>Départ<input ref={departureRef} type="date" min={destination.startDate} value={destination.endDate} onClick={showDatePicker} onChange={event => onChange({ ...destination, endDate: event.target.value })}/></label>
     {canRemove && <button type="button" className="remove-destination" aria-label={`Supprimer l’étape ${index + 1}`} onClick={onRemove}><Trash2 size={16}/></button>}

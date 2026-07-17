@@ -7,6 +7,7 @@ import ItemSetupWizard from "../components/ItemSetupWizard";
 import CompatibilityWizard from "../components/CompatibilityWizard";
 import CapsuleWizard from "../components/CapsuleWizard";
 import Modal from "../components/Modal";
+import ConfirmModal from "../components/ConfirmModal";
 
 const empty = { name:"", category:"Haut", brand:"", color:"", season:[], style:"", size:"", imageUrl:"", favorite:false };
 const categories = ["Haut", "Bas", "Inter", "Chaussures", "Accessoire", "Manteau"];
@@ -33,6 +34,9 @@ export default function Wardrobe() {
   const [saving, setSaving] = useState(false);
   const [seasonSaving, setSeasonSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const unclassifiedItems = items.filter(item => !item.category || !item.season?.length);
   const load=()=>Promise.all([
@@ -72,7 +76,7 @@ useEffect(() => {
       const allItems = await api("/clothes");
       setCompatibilityItems(allItems);
       if (!allItems.some(item => !item.compatibilityConfigured)) {
-        window.alert("Toutes les pièces ont déjà été configurées.");
+        setNotice("Toutes les pièces ont déjà leurs compatibilités configurées.");
         return;
       }
       setShowCompatibilityWizard(true);
@@ -154,7 +158,23 @@ useEffect(() => {
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
   };
-  const remove=async id=>{if(confirm("Supprimer ce vêtement ?")){await api(`/clothes/${id}`,{method:"DELETE"});load()}};
+  const requestRemove = id => setDeleteTarget(items.find(item => item._id === id) || { _id: id });
+  const confirmRemove = async () => {
+    if (!deleteTarget?._id) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await api(`/clothes/${deleteTarget._id}`, { method: "DELETE" });
+      setDeleteTarget(null);
+      setNotice("Le vêtement a été supprimé.");
+      await load();
+    } catch (err) {
+      setError(err.message);
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
   const favorite=async item=>{await api(`/clothes/${item._id}`,{method:"PUT",body:JSON.stringify({favorite:!item.favorite})});load()};
 
   const displayedItems = items
@@ -165,6 +185,8 @@ useEffect(() => {
   const compatibleItems = compatibilityCatalog.filter(item => compatibleIds.has(item._id));
 
   return <><header className="page-header wardrobe-header"><div><h1>Garde-robe</h1><span className="page-count">{displayedItems.length} pièce{displayedItems.length > 1 ? "s" : ""}</span></div><button className="primary" onClick={()=>openEditor(empty)}><Plus size={18}/> Ajouter</button></header>
+  {notice && <div className="page-notice" role="status">{notice}<button type="button" aria-label="Fermer le message" onClick={()=>setNotice("")}>×</button></div>}
+  {error && !editing && !showCollectionModal && <div className="page-notice error" role="alert">{error}<button type="button" aria-label="Fermer le message d’erreur" onClick={()=>setError("")}>×</button></div>}
   <div className="wardrobe-filters">
     <div className="filter-group">
       <span>Catégories</span>
@@ -197,7 +219,7 @@ useEffect(() => {
       </div>
     </details>
   </div>
-  <div className="cards-grid">{displayedItems.map(item=><ClothingCard key={item._id} item={item} onEdit={openEditor} onDelete={remove} onFavorite={favorite}/>)}</div>
+  <div className="cards-grid">{displayedItems.map(item=><ClothingCard key={item._id} item={item} onEdit={openEditor} onDelete={requestRemove} onFavorite={favorite}/>)}</div>
   {showSetupWizard && unclassifiedItems.length > 0 && <ItemSetupWizard items={unclassifiedItems} onClose={()=>{setShowSetupWizard(false);load();}} onComplete={()=>{setShowSetupWizard(false);load();}}/>}
   {showCompatibilityWizard && compatibilityItems.length > 0 && <CompatibilityWizard items={compatibilityTarget ? [compatibilityTarget] : compatibilityItems.filter(item => !item.compatibilityConfigured)} allItems={compatibilityItems} onClose={()=>{setShowCompatibilityWizard(false);setCompatibilityTarget(null);load();}} onComplete={()=>{setShowCompatibilityWizard(false);setCompatibilityTarget(null);load();}}/>}
   {showCapsuleWizard && capsuleItems.length > 0 && <CapsuleWizard items={capsuleItems} onClose={()=>setShowCapsuleWizard(false)} onComplete={()=>{setShowCapsuleWizard(false);load();}}/>}
@@ -207,6 +229,7 @@ useEffect(() => {
     {error&&<p className="field-error">{error}</p>}
     <button className="primary" disabled={saving}>{saving&&<LoaderCircle className="spin" size={18}/>} {saving?"Création…":"Créer la collection"}</button>
   </form></Modal>}
+  {deleteTarget && <ConfirmModal title="Supprimer ce vêtement ?" message={`${deleteTarget.name || deleteTarget.category || "Ce vêtement"} sera retiré de votre garde-robe et de ses compatibilités.`} confirmLabel="Supprimer" loading={deleting} onConfirm={confirmRemove} onClose={()=>setDeleteTarget(null)}/>} 
   {editing&&<Modal title={editing._id?(editing.name || editing.category || "Vêtement"):"Ajouter un vêtement"} onClose={()=>setEditing(null)}><form className={`form-grid ${editing._id ? "clothing-details-form" : ""}`} onSubmit={save}>
     {editing._id ? <section className="clothing-details-summary full">
       {editing.imageUrl ? <img src={editing.imageUrl} alt={editing.name || editing.category}/> : <span/>}
