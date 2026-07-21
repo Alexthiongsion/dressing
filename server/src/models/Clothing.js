@@ -14,6 +14,11 @@ category: {
   style: { type: String, trim: true, default: "" },
   size: { type: String, trim: true, default: "" },
   imageUrl: { type: String, trim: true, default: "" },
+  imageDisplay: {
+    scale: { type: Number, default: 1, min: 0.6, max: 1.8 },
+    offsetX: { type: Number, default: 0, min: -40, max: 40 },
+    offsetY: { type: Number, default: 0, min: -40, max: 40 }
+  },
   favorite: { type: Boolean, default: false },
   compatibleWith: [{ type: mongoose.Schema.Types.ObjectId, ref: "Clothing" }],
   compatibilityConfigured: { type: Boolean, default: false },

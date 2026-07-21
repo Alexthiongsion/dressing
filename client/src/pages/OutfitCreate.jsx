@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { ArrowDownWideNarrow, ArrowLeft, ArrowUpWideNarrow, Lock, LockOpen, Plus, RefreshCw, RotateCcw, Save, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowLeft, ArrowUpWideNarrow, ChevronLeft, ChevronRight, Lock, LockOpen, RefreshCw, RotateCcw, Save, Sparkles, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { api } from "../services/api";
 import { areCompatible, completeOutfit } from "../utils/outfitSuggestions";
+import PageState from "../components/PageState";
+import NormalizedClothingImage from "../components/NormalizedClothingImage";
 
 const seasons = ["Printemps", "Été", "Automne", "Hiver"];
 const categories = ["Haut", "Bas", "Inter", "Chaussures", "Accessoire", "Manteau"];
@@ -22,14 +24,21 @@ export default function OutfitCreate() {
   const [sortByLeastCompatibility, setSortByLeastCompatibility] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [showItemDrawer, setShowItemDrawer] = useState(false);
-  useEffect(() => { api("/clothes").then(setClothes); }, []);
+  const [itemPage, setItemPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const loadClothes = async signal => {
+    setLoading(true);
+    setLoadError("");
+    try { setClothes(await api("/clothes", { signal })); }
+    catch (loadFailure) { if (!signal?.aborted) setLoadError(loadFailure.message || "Impossible de charger la garde-robe."); }
+    finally { if (!signal?.aborted) setLoading(false); }
+  };
   useEffect(() => {
-    if (!showItemDrawer) return undefined;
-    const closeOnEscape = event => { if (event.key === "Escape") setShowItemDrawer(false); };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [showItemDrawer]);
+    const controller = new AbortController();
+    loadClothes(controller.signal);
+    return () => controller.abort();
+  }, []);
 
   const selectedItems = selected.map(id => clothes.find(item => item._id === id)).filter(Boolean);
   const availableCategories = categories.filter(value => !selectedItems.some(item => item.category === value));
@@ -40,6 +49,10 @@ export default function OutfitCreate() {
     if (selectedItems.some(value => value.category === item.category)) return false;
     return selectedItems.every(value => value.compatibleWith?.some(link => (link._id || link) === item._id));
   }).sort((a, b) => sortByCompatibility ? (b.compatibleWith?.length || 0) - (a.compatibleWith?.length || 0) : sortByLeastCompatibility ? (a.compatibleWith?.length || 0) - (b.compatibleWith?.length || 0) : 0);
+  const itemPageCount = Math.max(1, Math.ceil(availableItems.length / 10));
+  const visibleAvailableItems = availableItems.slice(itemPage * 10, itemPage * 10 + 10);
+  useEffect(() => { setItemPage(0); }, [category, season, sortByCompatibility, sortByLeastCompatibility]);
+  useEffect(() => { setItemPage(current => Math.min(current, itemPageCount - 1)); }, [itemPageCount]);
 
   const addItem = id => {
     const item = clothes.find(value => value._id === id);
@@ -85,20 +98,27 @@ export default function OutfitCreate() {
     setError("");
   };
   const save = async event => {
-    event.preventDefault(); setSaving(true);
+    event.preventDefault(); setSaving(true); setError("");
     const body = { name: `Tenue du ${new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date())}`, occasion: "", clothes: selected, season };
-    await api("/outfits", { method: "POST", body: JSON.stringify(body) });
-    navigate("/outfits");
+    try {
+      await api("/outfits", { method: "POST", body: JSON.stringify(body) });
+      navigate("/outfits");
+    } catch (saveError) {
+      setError(saveError.message || "Impossible de créer la tenue.");
+    } finally { setSaving(false); }
   };
-  const renderSelectedItem = item => <article className="outfit-selected-image" key={item._id}><div className="outfit-selected-visual">{item.imageUrl ? <img src={item.imageUrl} alt={item.name || item.category}/> : <span/>}<div className="suggestion-item-actions"><button type="button" className={locked.includes(item._id) ? "locked" : ""} aria-label={locked.includes(item._id) ? "Déverrouiller" : "Verrouiller"} title={locked.includes(item._id) ? "Pièce conservée" : "Verrouiller"} onClick={() => setLocked(current => current.includes(item._id) ? current.filter(id => id !== item._id) : [...current, item._id])}>{locked.includes(item._id) ? <Lock size={15}/> : <LockOpen size={15}/>}</button><button type="button" className="replace-suggestion" aria-label={`Remplacer automatiquement ${item.name || item.category}`} title="Autre pièce compatible" onClick={() => replaceAutomatically(item)}><RefreshCw size={15}/></button><button type="button" aria-label={`Retirer ${item.name || item.category}`} title="Retirer" onClick={() => { setSelected(current => current.filter(id => id !== item._id)); setLocked(current => current.filter(id => id !== item._id)); setSuggested(current => current.filter(id => id !== item._id)); }}><Trash2 size={15}/></button></div>{suggested.includes(item._id) && <i className="suggested-badge"><Sparkles size={12}/> Suggérée</i>}</div></article>;
+  const renderSelectedItem = item => <article className={`outfit-selected-image category-${item.category.toLowerCase()}`} key={item._id}><div className="outfit-selected-visual">{item.imageUrl ? <NormalizedClothingImage item={item} alt={item.name || item.category} proportionate/> : <span/>}<div className="suggestion-item-actions"><button type="button" className={locked.includes(item._id) ? "locked" : ""} aria-label={locked.includes(item._id) ? "Déverrouiller" : "Verrouiller"} title={locked.includes(item._id) ? "Pièce conservée" : "Verrouiller"} onClick={() => setLocked(current => current.includes(item._id) ? current.filter(id => id !== item._id) : [...current, item._id])}>{locked.includes(item._id) ? <Lock size={15}/> : <LockOpen size={15}/>}</button><button type="button" className="replace-suggestion" aria-label={`Remplacer automatiquement ${item.name || item.category}`} title="Autre pièce compatible" onClick={() => replaceAutomatically(item)}><RefreshCw size={15}/></button><button type="button" aria-label={`Retirer ${item.name || item.category}`} title="Retirer" onClick={() => { setSelected(current => current.filter(id => id !== item._id)); setLocked(current => current.filter(id => id !== item._id)); setSuggested(current => current.filter(id => id !== item._id)); }}><Trash2 size={15}/></button></div>{suggested.includes(item._id) && <i className="suggested-badge"><Sparkles size={12}/> Suggérée</i>}</div></article>;
 
-  return <><header className="page-header outfit-create-header"><div><span className="eyebrow">Nouvelle combinaison</span><h1>Créer un outfit</h1></div><div className="page-actions"><button type="button" className="secondary" onClick={() => navigate("/outfits")}><ArrowLeft size={18}/> Retour</button><button type="submit" form="outfit-create-form" className="primary" disabled={saving || !selected.length}><Save size={18}/> {saving ? "Création…" : "Créer l’outfit"}</button></div></header><form id="outfit-create-form" className="creation-page outfit-builder-page composition-fullscreen" onSubmit={save}>
+  if (loading) return <PageState loading title="Chargement de votre garde-robe…"/>;
+  if (loadError) return <PageState title="La création de tenue n’est pas disponible" message={loadError} onAction={() => loadClothes()}/>;
+
+  return <><header className="page-header outfit-create-header"><div><span className="eyebrow">Nouvelle combinaison</span><h1>Créer une tenue</h1></div><div className="page-actions"><button type="button" className="secondary" onClick={() => navigate("/outfits")}><ArrowLeft size={18}/> Retour</button><button type="submit" form="outfit-create-form" className="primary" disabled={saving || !selected.length}><Save size={18}/> {saving ? "Création…" : "Créer la tenue"}</button></div></header><form id="outfit-create-form" className="creation-page outfit-builder-page outfit-capsule-builder" onSubmit={save}>
     <section className={`outfit-build-zone ${draggingOver ? "dragging" : ""}`} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setDraggingOver(true); }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDraggingOver(false); }} onDrop={dropItem}>
       <header className="composition-toolbar"><button type="button" className="composition-reset" disabled={!selected.length} aria-label="Réinitialiser la tenue" title="Réinitialiser" onClick={() => { setSelected([]); setLocked([]); setSuggested([]); setError(""); }}><RotateCcw size={18}/></button></header>
-      <div className="composition-assist-bar"><button type="button" className="secondary compact" onClick={() => setShowItemDrawer(true)}><Plus size={16}/> Ajouter des pièces</button><button type="button" className="secondary compact" disabled={!selected.length} onClick={complete}><Sparkles size={16}/> {suggested.length ? "Autre proposition" : "Compléter la tenue"}</button></div>
+      <div className="composition-assist-bar"><button type="button" className="secondary compact" disabled={!selected.length} onClick={complete}><Sparkles size={16}/> {suggested.length ? "Autre proposition" : "Compléter la tenue"}</button></div>
       {selectedItems.length ? <div className="outfit-vertical-stack">{selectedItems.some(item => ["Haut", "Inter", "Manteau"].includes(item.category)) && <div className="outfit-horizontal-layer">{selectedItems.filter(item => ["Manteau", "Inter", "Haut"].includes(item.category)).map(renderSelectedItem)}</div>}{selectedItems.filter(item => !["Haut", "Inter", "Manteau", "Bas", "Chaussures"].includes(item.category)).map(renderSelectedItem)}{selectedItems.some(item => ["Bas", "Chaussures"].includes(item.category)) && <div className="outfit-horizontal-layer outfit-bottom-layer">{selectedItems.filter(item => ["Bas", "Chaussures"].includes(item.category)).map(renderSelectedItem)}</div>}</div> : <div className="outfit-build-empty"><strong>Glissez vos vêtements ici</strong><span>Les pièces s’empileront automatiquement dans un ordre logique.</span></div>}
       {error && <p className="field-error">{error}</p>}
     </section>
-    {showItemDrawer && <div className="modal-backdrop outfit-drawer-backdrop" onMouseDown={() => setShowItemDrawer(false)}><section className="modal outfit-items-modal" onMouseDown={event => event.stopPropagation()}><header><div><span className="eyebrow">Garde-robe</span><h2>Ajouter des pièces</h2></div><button type="button" aria-label="Fermer" onClick={() => setShowItemDrawer(false)}>×</button></header><section className="outfit-item-drawer"><div className="creation-list-heading"><div><p>Filtrez puis cliquez sur une vignette pour l’ajouter.</p></div><div className="compatibility-sort-actions"><button type="button" className={`secondary compact ${sortByCompatibility ? "active" : ""}`} aria-pressed={sortByCompatibility} onClick={() => { setSortByCompatibility(value => !value); setSortByLeastCompatibility(false); }}><ArrowDownWideNarrow size={16}/> Plus compatibles</button><button type="button" className={`secondary compact ${sortByLeastCompatibility ? "active" : ""}`} aria-pressed={sortByLeastCompatibility} onClick={() => { setSortByLeastCompatibility(value => !value); setSortByCompatibility(false); }}><ArrowUpWideNarrow size={16}/> Moins compatibles</button></div></div><div className="outfit-filter-row"><span>Catégorie</span><div className="category-pills outfit-category-pills"><button type="button" className={!category ? "active" : ""} onClick={() => setCategory("")}>Tout</button>{availableCategories.map(value => <button type="button" key={value} className={category === value ? "active" : ""} onClick={() => setCategory(value)}>{value}</button>)}</div></div><div className="outfit-filter-row"><span>Saison</span><div className="category-pills outfit-category-pills"><button type="button" className={!season ? "active" : ""} onClick={() => setSeason("")}>Toutes</button>{seasons.map(value => <button type="button" key={value} className={season === value ? "active" : ""} onClick={() => setSeason(value)}>{value}</button>)}</div></div><div className="outfit-drag-items">{availableItems.map(item => <button type="button" key={item._id} onClick={() => addItem(item._id)}>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span/>}</button>)}</div>{!availableItems.length && <p className="empty-filter-message">Aucune pièce compatible avec ces filtres.</p>}</section></section></div>}
+    <section className="outfit-capsule-library completion-library-minimal"><div className="completion-filter-groups"><div className="outfit-filter-row"><span>Catégorie</span><div className="category-pills outfit-category-pills"><button type="button" className={!category ? "active" : ""} aria-pressed={!category} onClick={() => setCategory("")}>Tout</button>{availableCategories.map(value => <button type="button" key={value} className={category === value ? "active" : ""} aria-pressed={category === value} onClick={() => setCategory(value)}>{value}</button>)}</div></div><div className="outfit-filter-row"><span>Saison</span><div className="category-pills outfit-category-pills"><button type="button" className={!season ? "active" : ""} aria-pressed={!season} onClick={() => setSeason("")}>Toutes</button>{seasons.map(value => <button type="button" key={value} className={season === value ? "active" : ""} aria-pressed={season === value} onClick={() => setSeason(value)}>{value}</button>)}</div></div><div className="suggestion-sort"><button type="button" className={sortByCompatibility ? "active" : ""} aria-pressed={sortByCompatibility} onClick={() => { setSortByCompatibility(value => !value); setSortByLeastCompatibility(false); }}><ArrowDownWideNarrow size={15}/> Plus compatibles</button><button type="button" className={sortByLeastCompatibility ? "active" : ""} aria-pressed={sortByLeastCompatibility} onClick={() => { setSortByLeastCompatibility(value => !value); setSortByCompatibility(false); }}><ArrowUpWideNarrow size={15}/> Moins compatibles</button></div></div><div className="outfit-available-grid">{visibleAvailableItems.map(item => <button type="button" draggable key={item._id} className="suggestion-tile" aria-label={`Ajouter ${item.name || item.category}`} title={item.name || item.category} onClick={() => addItem(item._id)} onDragStart={event => { event.dataTransfer.setData("text/plain", item._id); event.dataTransfer.effectAllowed = "copy"; }}>{item.imageUrl ? <NormalizedClothingImage item={item}/> : <span/>}</button>)}{!availableItems.length && <p className="empty-filter-message">Aucune pièce compatible avec ces filtres.</p>}</div>{itemPageCount > 1 && <nav className="completion-pagination" aria-label="Pages de vêtements"><button type="button" aria-label="Page précédente" onClick={() => setItemPage(value => (value - 1 + itemPageCount) % itemPageCount)}><ChevronLeft size={18}/></button><span>{itemPage + 1} / {itemPageCount}</span><button type="button" aria-label="Page suivante" onClick={() => setItemPage(value => (value + 1) % itemPageCount)}><ChevronRight size={18}/></button></nav>}</section>
   </form></>;
 }

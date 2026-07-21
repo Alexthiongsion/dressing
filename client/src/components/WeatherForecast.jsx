@@ -21,6 +21,8 @@ export default function WeatherForecast() {
   const [requestId, setRequestId] = useState(0);
 
   useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
     setLoading(true);
     setError("");
 
@@ -41,18 +43,22 @@ export default function WeatherForecast() {
           timezone: "auto",
           forecast_days: "7",
         });
-        const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal: controller.signal });
         if (!response.ok) throw new Error("Prévisions indisponibles");
-        setWeather(await response.json());
+        const nextWeather = await response.json();
+        if (active) setWeather(nextWeather);
       } catch (err) {
-        setError(err.message || "Impossible de charger la météo.");
+        if (active && !controller.signal.aborted) setError(err.message || "Impossible de charger la météo.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }, () => {
-      setError("Autorisez votre position pour afficher la météo locale.");
-      setLoading(false);
+      if (active) {
+        setError("Autorisez votre position pour afficher la météo locale.");
+        setLoading(false);
+      }
     }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 15 * 60 * 1000 });
+    return () => { active = false; controller.abort(); };
   }, [requestId]);
 
   const days = weather?.daily?.time?.slice(0, range).map((date, index) => ({

@@ -33,11 +33,17 @@ router.post("/capsule", async (req, res) => {
 });
 router.post("/capsule/generated", async (req, res) => {
   const name = req.body.name?.trim();
+  const capsuleMode = req.body.capsuleMode === "simple" ? "simple" : "travel";
   const proposedOutfits = Array.isArray(req.body.outfits) ? req.body.outfits.slice(0, 20) : [];
-  if (!name || !proposedOutfits.length) return res.status(400).json({ message: "Capsule invalide" });
-  const ids = [...new Set(proposedOutfits.flatMap(outfit => outfit.clothes || []))];
+  const simpleClothes = Array.isArray(req.body.clothes) ? req.body.clothes : [];
+  if (!name || (capsuleMode === "travel" && !proposedOutfits.length) || (capsuleMode === "simple" && !simpleClothes.length)) return res.status(400).json({ message: "Capsule invalide" });
+  const ids = [...new Set(capsuleMode === "simple" ? simpleClothes : proposedOutfits.flatMap(outfit => outfit.clothes || []))];
   const clothes = await Clothing.find({ _id: { $in: ids } });
   if (clothes.length !== ids.length) return res.status(400).json({ message: "Certaines pièces sont introuvables" });
+  if (capsuleMode === "simple") {
+    const missingCategories = ["Haut", "Bas", "Chaussures"].filter(category => !clothes.some(item => item.category === category));
+    if (missingCategories.length) return res.status(400).json({ message: `Une capsule doit contenir au minimum un haut, un bas et une paire de chaussures. Il manque : ${missingCategories.join(" · ")}` });
+  }
   const byId = new Map(clothes.map(item => [String(item._id), item]));
   for (const proposal of proposedOutfits) {
     const items = (proposal.clothes || []).map(id => byId.get(String(id))).filter(Boolean);
@@ -45,8 +51,8 @@ router.post("/capsule/generated", async (req, res) => {
     const compatible = items.every((item, index) => items.slice(index + 1).every(other => item.compatibleWith.map(String).includes(String(other._id)) || other.compatibleWith.map(String).includes(String(item._id))));
     if (!compatible) return res.status(400).json({ message: "Une tenue contient des pièces incompatibles" });
   }
-  const created = await Outfit.insertMany(proposedOutfits.map((proposal, index) => ({ name: proposal.name?.trim() || `${name} · Tenue ${index + 1}`, clothes: proposal.clothes, occasion: "Voyage", season: req.body.season || "" })));
-  const collection = await Collection.create({ name, description: "Capsule bagage", clothes: ids, outfits: created.map(outfit => outfit._id), travel: req.body.travel, weather: req.body.weather });
+  const created = capsuleMode === "simple" ? [] : await Outfit.insertMany(proposedOutfits.map((proposal, index) => ({ name: proposal.name?.trim() || `${name} · Tenue ${index + 1}`, clothes: proposal.clothes, occasion: "Voyage", season: req.body.season || "" })));
+  const collection = await Collection.create({ name, capsuleMode, targetPieces: capsuleMode === "simple" ? Math.min(100, Math.max(1, Number(req.body.targetPieces) || 15)) : undefined, description: capsuleMode === "simple" ? "Capsule" : "Capsule bagage", clothes: ids, outfits: created.map(outfit => outfit._id), travel: capsuleMode === "travel" ? req.body.travel : undefined, weather: capsuleMode === "travel" ? req.body.weather : undefined, packingRequirements: req.body.packingRequirements });
   await collection.populate("clothes");
   await collection.populate({ path: "outfits", populate: { path: "clothes" } });
   res.status(201).json(collection);

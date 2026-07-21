@@ -9,7 +9,7 @@ const focusableSelector = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
-export default function Modal({ title, children, onClose, page = false, dialogRole = "dialog" }) {
+export default function Modal({ title, children, onClose, page = false, dialogRole = "dialog", className = "" }) {
   const backdropRef = useRef(null);
   const dialogRef = useRef(null);
   const previousFocusRef = useRef(null);
@@ -66,7 +66,7 @@ export default function Modal({ title, children, onClose, page = false, dialogRo
   }, [pageMode]);
 
   return <div ref={backdropRef} className={`modal-backdrop${pageMode ? " page-dialog" : ""}`} onMouseDown={pageMode ? undefined : close}>
-    <section ref={dialogRef} className={`modal${pageMode ? " page-dialog-content" : ""}`} role={pageMode ? undefined : dialogRole} aria-modal={pageMode ? undefined : "true"} aria-labelledby={pageMode ? undefined : titleId} tabIndex={pageMode ? undefined : -1} onMouseDown={event => event.stopPropagation()}>
+    <section ref={dialogRef} className={`modal${pageMode ? " page-dialog-content" : ""}${className ? ` ${className}` : ""}`} role={pageMode ? undefined : dialogRole} aria-modal={pageMode ? undefined : "true"} aria-labelledby={pageMode ? undefined : titleId} tabIndex={pageMode ? undefined : -1} onMouseDown={event => event.stopPropagation()}>
       <header><h2 id={titleId}>{title}</h2><button type="button" aria-label={pageMode ? "Retour aux capsules" : "Fermer"} onClick={close}>{pageMode ? "← Capsules" : "×"}</button></header>
       {children}
     </section>

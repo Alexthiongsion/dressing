@@ -9,14 +9,18 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const loadDashboard = async () => {
+  const loadDashboard = async signal => {
     setLoading(true);
     setError("");
-    try { setData(await api("/dashboard")); }
-    catch (err) { setError(err.message || "Impossible de charger votre dressing."); }
-    finally { setLoading(false); }
+    try { setData(await api("/dashboard", { signal })); }
+    catch (err) { if (!signal?.aborted) setError(err.message || "Impossible de charger votre dressing."); }
+    finally { if (!signal?.aborted) setLoading(false); }
   };
-  useEffect(() => { loadDashboard(); }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadDashboard(controller.signal);
+    return () => controller.abort();
+  }, []);
 
   const date = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
 
@@ -34,7 +38,7 @@ export default function Dashboard() {
 
     <WeatherForecast/>
 
-    {loading ? <PageState loading title="Chargement de votre dressing…"/> : error ? <PageState title="Votre dressing n’a pas pu être chargé" message="Vérifiez la connexion au serveur puis réessayez." onAction={loadDashboard}/> : data ? <>
+    {loading ? <PageState loading title="Chargement de votre dressing…"/> : error ? <PageState title="Votre dressing n’a pas pu être chargé" message="Vérifiez la connexion au serveur puis réessayez." onAction={() => loadDashboard()}/> : data ? <>
       <section className="dashboard-recent">
         <header><h2>Dernières pièces</h2><Link to="/wardrobe">Tout voir <ArrowRight size={16}/></Link></header>
         {data.recentClothes.length ? <div>{data.recentClothes.map(item => <Link className="dashboard-recent-card" to="/wardrobe" key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt={item.name || item.category}/> : <span/>}<footer><b>{item.name || item.category}</b><small>{item.category}</small></footer></Link>)}</div> : <p className="dashboard-empty">Ajoutez votre première pièce pour la retrouver ici.</p>}

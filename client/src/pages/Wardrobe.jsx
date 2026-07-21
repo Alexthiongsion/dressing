@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FolderPlus, LoaderCircle, Luggage, MoreHorizontal, Network, Plus, RotateCcw, Tags } from "lucide-react";
 import { api, uploadImage } from "../services/api";
 import ClothingCard from "../components/ClothingCard";
@@ -8,6 +8,9 @@ import CompatibilityWizard from "../components/CompatibilityWizard";
 import CapsuleWizard from "../components/CapsuleWizard";
 import Modal from "../components/Modal";
 import ConfirmModal from "../components/ConfirmModal";
+import PageState from "../components/PageState";
+import NormalizedClothingImage from "../components/NormalizedClothingImage";
+import { defaultImageDisplay } from "../utils/normalizeClothingImage";
 
 const empty = { name:"", category:"Haut", brand:"", color:"", season:[], style:"", size:"", imageUrl:"", favorite:false };
 const categories = ["Haut", "Bas", "Inter", "Chaussures", "Accessoire", "Manteau"];
@@ -33,18 +36,42 @@ export default function Wardrobe() {
   const [imageFile, setImageFile] = useState(undefined);
   const [saving, setSaving] = useState(false);
   const [seasonSaving, setSeasonSaving] = useState(false);
+  const [displaySaving, setDisplaySaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const loadedOnceRef = useRef(false);
+  const loadRequestRef = useRef(0);
+  const catalogCacheRef = useRef(null);
+  const imageDisplaySaveRef = useRef(null);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const unclassifiedItems = items.filter(item => !item.category || !item.season?.length);
-  const load=()=>Promise.all([
-    api(`/clothes?category=${encodeURIComponent(selectedCategories.join(","))}&season=${encodeURIComponent(selectedSeasons.join(","))}`),
-    api("/collections"),
-  ]).then(([clothes, nextCollections]) => { setItems(clothes); setCollections(nextCollections); });
+  const load = async ({ showLoading = false } = {}) => {
+    const requestId = ++loadRequestRef.current;
+    if (showLoading) setLoading(true);
+    setLoadError("");
+    try {
+      const [clothes, nextCollections] = await Promise.all([
+        api(`/clothes?category=${encodeURIComponent(selectedCategories.join(","))}&season=${encodeURIComponent(selectedSeasons.join(","))}`),
+        api("/collections"),
+      ]);
+      if (requestId !== loadRequestRef.current) return;
+      setItems(clothes);
+      setCollections(nextCollections);
+    } catch (err) {
+      if (requestId !== loadRequestRef.current) return;
+      setLoadError(err.message || "Impossible de charger la garde-robe.");
+    } finally {
+      if (requestId !== loadRequestRef.current) return;
+      loadedOnceRef.current = true;
+      setLoading(false);
+    }
+  };
   useEffect(() => {
-  load();
+  load({ showLoading: !loadedOnceRef.current });
 }, [selectedCategories, selectedSeasons]);
 
 useEffect(() => {
@@ -57,6 +84,8 @@ useEffect(() => {
   };
 }, [selectedCategories, selectedSeasons]);
 
+useEffect(() => () => window.clearTimeout(imageDisplaySaveRef.current), []);
+
   const toggleFilter = (value, setter) => {
     setter(current => current.includes(value) ? current.filter(item => item !== value) : [...current, value]);
   };
@@ -64,7 +93,9 @@ useEffect(() => {
   const openCollectionModal = async () => {
     setError("");
     try {
-      setCollectionCandidates(await api("/clothes"));
+      const allItems = catalogCacheRef.current || await api("/clothes");
+      catalogCacheRef.current = allItems;
+      setCollectionCandidates(allItems);
       setShowCollectionModal(true);
     } catch (err) { setError(err.message); }
   };
@@ -73,7 +104,8 @@ useEffect(() => {
     setError("");
     setCompatibilityTarget(null);
     try {
-      const allItems = await api("/clothes");
+      const allItems = catalogCacheRef.current || await api("/clothes");
+      catalogCacheRef.current = allItems;
       setCompatibilityItems(allItems);
       if (!allItems.some(item => !item.compatibilityConfigured)) {
         setNotice("Toutes les pièces ont déjà leurs compatibilités configurées.");
@@ -88,7 +120,8 @@ useEffect(() => {
     if (!target?._id) return;
     setError("");
     try {
-      const allItems = compatibilityCatalog.length ? compatibilityCatalog : await api("/clothes");
+      const allItems = compatibilityCatalog.length ? compatibilityCatalog : catalogCacheRef.current || await api("/clothes");
+      catalogCacheRef.current = allItems;
       const freshTarget = allItems.find(item => item._id === target._id) || target;
       setCompatibilityItems(allItems);
       setCompatibilityTarget(freshTarget);
@@ -100,7 +133,9 @@ useEffect(() => {
   const openCapsuleWizard = async () => {
     setError("");
     try {
-      setCapsuleItems(await api("/clothes"));
+      const allItems = catalogCacheRef.current || await api("/clothes");
+      catalogCacheRef.current = allItems;
+      setCapsuleItems(allItems);
       setShowCapsuleWizard(true);
     } catch (err) { setError(err.message); }
   };
@@ -121,11 +156,12 @@ useEffect(() => {
     setEditing(item);
     setImageFile(undefined);
     setError("");
-    setCompatibilityCatalog([]);
+    setCompatibilityCatalog(catalogCacheRef.current || []);
     if (!item._id) return;
+    if (catalogCacheRef.current) return;
     setLoadingCompatibilityList(true);
     api("/clothes")
-      .then(setCompatibilityCatalog)
+      .then(allItems => { catalogCacheRef.current = allItems; setCompatibilityCatalog(allItems); })
       .catch(err => setError(err.message))
       .finally(() => setLoadingCompatibilityList(false));
   };
@@ -138,11 +174,31 @@ useEffect(() => {
     setError("");
     try {
       await api(`/clothes/${editing._id}`, { method: "PUT", body: JSON.stringify({ season: nextSeasons }) });
+      catalogCacheRef.current = null;
       setItems(current => current.map(item => item._id === editing._id ? { ...item, season: nextSeasons } : item));
     } catch (err) {
       setEditing(current => ({ ...current, season: previousSeasons }));
       setError(err.message);
     } finally { setSeasonSaving(false); }
+  };
+  const updateImageDisplay = (changes, { immediate = false } = {}) => {
+    if (!editing?._id) return;
+    const itemId = editing._id;
+    const nextDisplay = { ...defaultImageDisplay, ...(editing.imageDisplay || {}), ...changes };
+    setEditing(current => ({ ...current, imageDisplay: nextDisplay }));
+    window.clearTimeout(imageDisplaySaveRef.current);
+    const persist = async () => {
+      setDisplaySaving(true);
+      setError("");
+      try {
+        await api(`/clothes/${itemId}`, { method: "PUT", body: JSON.stringify({ imageDisplay: nextDisplay }) });
+        setItems(current => current.map(item => item._id === itemId ? { ...item, imageDisplay: nextDisplay } : item));
+        catalogCacheRef.current = null;
+      } catch (err) { setError(err.message); }
+      finally { setDisplaySaving(false); }
+    };
+    if (immediate) persist();
+    else imageDisplaySaveRef.current = window.setTimeout(persist, 320);
   };
   const save=async e=>{
     e.preventDefault(); setSaving(true); setError("");
@@ -154,6 +210,7 @@ useEffect(() => {
       if (imageFile instanceof File) body.imageUrl = (await uploadImage(imageFile)).imageUrl;
       if (imageFile === null) body.imageUrl = "";
       await api(`/clothes${editing._id?`/${editing._id}`:""}`,{method:editing._id?"PUT":"POST",body:JSON.stringify(body)});
+      catalogCacheRef.current = null;
       setEditing(null); setImageFile(undefined); load();
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
@@ -165,6 +222,7 @@ useEffect(() => {
     setError("");
     try {
       await api(`/clothes/${deleteTarget._id}`, { method: "DELETE" });
+      catalogCacheRef.current = null;
       setDeleteTarget(null);
       setNotice("Le vêtement a été supprimé.");
       await load();
@@ -175,7 +233,7 @@ useEffect(() => {
       setDeleting(false);
     }
   };
-  const favorite=async item=>{await api(`/clothes/${item._id}`,{method:"PUT",body:JSON.stringify({favorite:!item.favorite})});load()};
+  const favorite=async item=>{await api(`/clothes/${item._id}`,{method:"PUT",body:JSON.stringify({favorite:!item.favorite})});catalogCacheRef.current=null;load()};
 
   const displayedItems = items
     .filter(item => !selectedCollections.length || selectedCollections.some(collectionId => collections.find(collection => collection._id === collectionId)?.clothes.some(clothing => (clothing._id || clothing) === item._id)))
@@ -183,6 +241,11 @@ useEffect(() => {
 
   const compatibleIds = new Set((editing?.compatibleWith || []).map(value => value._id || value));
   const compatibleItems = compatibilityCatalog.filter(item => compatibleIds.has(item._id));
+  const hasActiveFilters = selectedCategories.length > 0 || selectedSeasons.length > 0;
+  const resetFilters = () => {
+    setSelectedCategories([]);
+    setSelectedSeasons([]);
+  };
 
   return <><header className="page-header wardrobe-header"><div><h1>Garde-robe</h1><span className="page-count">{displayedItems.length} pièce{displayedItems.length > 1 ? "s" : ""}</span></div><button className="primary" onClick={()=>openEditor(empty)}><Plus size={18}/> Ajouter</button></header>
   {notice && <div className="page-notice" role="status">{notice}<button type="button" aria-label="Fermer le message" onClick={()=>setNotice("")}>×</button></div>}
@@ -219,27 +282,28 @@ useEffect(() => {
       </div>
     </details>
   </div>
-  <div className="cards-grid">{displayedItems.map(item=><ClothingCard key={item._id} item={item} onEdit={openEditor} onDelete={requestRemove} onFavorite={favorite}/>)}</div>
+  {loading ? <PageState loading title="Chargement de la garde-robe…"/> : loadError ? <PageState title="La garde-robe n’a pas pu être chargée" message="Vos vêtements sont intacts. Réessayez dans un instant." onAction={() => load({ showLoading: true })}/> : displayedItems.length ? <div className="cards-grid">{displayedItems.map(item=><ClothingCard key={item._id} item={item} onEdit={openEditor} onDelete={requestRemove} onFavorite={favorite}/>)}</div> : <PageState title="Aucune pièce à afficher" message={hasActiveFilters ? "Aucun vêtement ne correspond aux filtres sélectionnés." : "Ajoutez votre première pièce à la garde-robe."} actionLabel={hasActiveFilters ? "Réinitialiser les filtres" : "Ajouter une pièce"} actionIcon={hasActiveFilters ? RotateCcw : Plus} onAction={hasActiveFilters ? resetFilters : () => openEditor(empty)}/>}
   {showSetupWizard && unclassifiedItems.length > 0 && <ItemSetupWizard items={unclassifiedItems} onClose={()=>{setShowSetupWizard(false);load();}} onComplete={()=>{setShowSetupWizard(false);load();}}/>}
   {showCompatibilityWizard && compatibilityItems.length > 0 && <CompatibilityWizard items={compatibilityTarget ? [compatibilityTarget] : compatibilityItems.filter(item => !item.compatibilityConfigured)} allItems={compatibilityItems} onClose={()=>{setShowCompatibilityWizard(false);setCompatibilityTarget(null);load();}} onComplete={()=>{setShowCompatibilityWizard(false);setCompatibilityTarget(null);load();}}/>}
   {showCapsuleWizard && capsuleItems.length > 0 && <CapsuleWizard items={capsuleItems} onClose={()=>setShowCapsuleWizard(false)} onComplete={()=>{setShowCapsuleWizard(false);load();}}/>}
   {showCollectionModal&&<Modal title="Ajouter une collection" onClose={()=>setShowCollectionModal(false)}><form className="stack" onSubmit={createCollection}>
     <label>Nom<input name="name" required autoFocus placeholder="Ex. Travail, Vacances…"/></label>
-    <fieldset><legend>Vêtements de la collection</legend><div className="collection-item-list">{collectionCandidates.map(item=><label className="collection-item-check" key={item._id}><input type="checkbox" name="clothes" value={item._id}/>{item.imageUrl?<img src={item.imageUrl} alt=""/>:<span/>}<b>{item.name || item.category || "Sans nom"}</b></label>)}</div></fieldset>
+    <fieldset><legend>Vêtements de la collection</legend><div className="collection-item-list">{collectionCandidates.map(item=><label className="collection-item-check" key={item._id}><input type="checkbox" name="clothes" value={item._id}/>{item.imageUrl?<NormalizedClothingImage item={item}/>:<span/>}<b>{item.name || item.category || "Sans nom"}</b></label>)}</div></fieldset>
     {error&&<p className="field-error">{error}</p>}
     <button className="primary" disabled={saving}>{saving&&<LoaderCircle className="spin" size={18}/>} {saving?"Création…":"Créer la collection"}</button>
   </form></Modal>}
   {deleteTarget && <ConfirmModal title="Supprimer ce vêtement ?" message={`${deleteTarget.name || deleteTarget.category || "Ce vêtement"} sera retiré de votre garde-robe et de ses compatibilités.`} confirmLabel="Supprimer" loading={deleting} onConfirm={confirmRemove} onClose={()=>setDeleteTarget(null)}/>} 
   {editing&&<Modal title={editing._id?(editing.name || editing.category || "Vêtement"):"Ajouter un vêtement"} onClose={()=>setEditing(null)}><form className={`form-grid ${editing._id ? "clothing-details-form" : ""}`} onSubmit={save}>
     {editing._id ? <section className="clothing-details-summary full">
-      {editing.imageUrl ? <img src={editing.imageUrl} alt={editing.name || editing.category}/> : <span/>}
+      {editing.imageUrl ? <NormalizedClothingImage item={editing} alt={editing.name || editing.category}/> : <span/>}
       <div><span className="eyebrow">{editing.category}</span><h3>{editing.name || editing.category}</h3>{[editing.brand, editing.color, editing.style, editing.size].filter(Boolean).length > 0 && <p>{[editing.brand, editing.color, editing.style, editing.size].filter(Boolean).join(" · ")}</p>}</div>
     </section> : <><ImageDropzone initialUrl={editing.imageUrl} onChange={setImageFile}/>
     <label>Nom<input name="name" defaultValue={editing.name} /></label><label>Catégorie<select name="category" defaultValue={editing.category}>{categories.map(x=><option key={x}>{x}</option>)}</select></label><label>Marque<input name="brand" defaultValue={editing.brand}/></label><label>Couleur<input name="color" defaultValue={editing.color}/></label><label>Style<input name="style" defaultValue={editing.style}/></label><label>Taille<input name="size" defaultValue={editing.size}/></label></>}
+    {editing._id && <section className="clothing-image-editor full"><header><div><span className="eyebrow">Affichage</span><h3>Taille et position de l’image</h3></div><button type="button" className="secondary compact" onClick={() => updateImageDisplay(defaultImageDisplay, { immediate: true })}><RotateCcw size={15}/> Réinitialiser</button></header><div className="clothing-image-editor-body"><div className="clothing-image-preview"><NormalizedClothingImage item={editing} alt={editing.name || editing.category}/></div><div className="clothing-image-controls"><label>Taille <output>{Math.round((editing.imageDisplay?.scale || 1) * 100)} %</output><input type="range" min="60" max="180" step="2" value={(editing.imageDisplay?.scale || 1) * 100} onChange={event => updateImageDisplay({ scale: Number(event.target.value) / 100 })}/></label><label>Horizontal <output>{editing.imageDisplay?.offsetX || 0}</output><input type="range" min="-40" max="40" step="1" value={editing.imageDisplay?.offsetX || 0} onChange={event => updateImageDisplay({ offsetX: Number(event.target.value) })}/></label><label>Vertical <output>{editing.imageDisplay?.offsetY || 0}</output><input type="range" min="-40" max="40" step="1" value={editing.imageDisplay?.offsetY || 0} onChange={event => updateImageDisplay({ offsetY: Number(event.target.value) })}/></label>{displaySaving && <small>Enregistrement…</small>}</div></div></section>}
     <fieldset className="full"><legend>Saisons {editing._id && seasonSaving && <small>Enregistrement…</small>}</legend>{seasons.map(x=><label className="check" key={x}><input type="checkbox" name="season" value={x} checked={editing._id ? editing.season?.includes(x) : undefined} defaultChecked={editing._id ? undefined : editing.season?.includes(x)} disabled={editing._id && seasonSaving} onChange={editing._id ? ()=>toggleEditingSeason(x) : undefined}/>{x}</label>)}</fieldset>
     {editing._id && <section className="clothing-compatibility-list full" aria-labelledby="clothing-compatibility-title">
       <header><div><Network size={18}/><h3 id="clothing-compatibility-title">Pièces compatibles</h3></div><div className="compatibility-list-actions"><strong>{editing.compatibleWith?.length || 0}</strong><button type="button" onClick={redoCompatibility}><RotateCcw size={15}/> Refaire les compatibilités</button></div></header>
-      {loadingCompatibilityList ? <p className="compatibility-list-status"><LoaderCircle className="spin" size={18}/> Chargement…</p> : compatibleItems.length ? <div>{compatibleItems.map(item => <article key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt={item.name || item.category}/> : <span/>}<footer><b>{item.name || item.category}</b><small>{item.category}</small></footer></article>)}</div> : <p className="compatibility-list-status">Aucune pièce compatible renseignée.</p>}
+      {loadingCompatibilityList ? <p className="compatibility-list-status"><LoaderCircle className="spin" size={18}/> Chargement…</p> : compatibleItems.length ? <div>{compatibleItems.map(item => <article key={item._id}>{item.imageUrl ? <NormalizedClothingImage item={item} alt={item.name || item.category}/> : <span/>}<footer><b>{item.name || item.category}</b><small>{item.category}</small></footer></article>)}</div> : <p className="compatibility-list-status">Aucune pièce compatible renseignée.</p>}
     </section>}
     {error && <p className="field-error full">{error}</p>}
     {!editing._id && <button className="primary full" type="submit" disabled={saving} aria-busy={saving}>
