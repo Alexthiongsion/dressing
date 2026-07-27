@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownWideNarrow, Check, ChevronRight, CirclePlus, Luggage, Minus, MoreHorizontal, Pencil, Plus, Shirt, Sparkles, Star, Trash2, X } from "lucide-react";
+import { ArrowDownWideNarrow, Check, ChevronRight, CirclePlus, Link2, Luggage, Minus, MoreHorizontal, Pencil, Plus, Shirt, Sparkles, Star, Trash2, X } from "lucide-react";
 import { api } from "../services/api";
 import { fetchItineraryWeather } from "../services/travelWeather";
 import ClothingCard from "../components/ClothingCard";
@@ -42,6 +42,7 @@ export default function Outfits({ capsulesOnly = false }) {
   const [addingPackingItem, setAddingPackingItem] = useState(false);
   const [packingCategory, setPackingCategory] = useState("");
   const [packingSeason, setPackingSeason] = useState("");
+  const [packingDetailItem, setPackingDetailItem] = useState(null);
   const [openOutfit, setOpenOutfit] = useState(null);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewSaving, setReviewSaving] = useState(false);
@@ -136,7 +137,7 @@ export default function Outfits({ capsulesOnly = false }) {
   }).sort((a, b) => sortByCompatibility ? (b.compatibleWith?.length || 0) - (a.compatibleWith?.length || 0) : 0);
   const openCapsuleDetail = async capsule => {
     if (capsulesOnly && !capsuleId) { navigate(`/capsules/${capsule._id}`); return; }
-    setPackedItems([]); setCapsuleDetailTab("outfits"); setCapsulePackingCategory(""); setCapsuleRating(capsule.rating || 0); setCapsuleActionError(""); setOpenCapsule(capsule);
+    setPackedItems([]); setCapsuleDetailTab("outfits"); setCapsulePackingCategory(""); setPackingDetailItem(null); setCapsuleRating(capsule.rating || 0); setCapsuleActionError(""); setOpenCapsule(capsule);
     const destinations = capsule.travel?.destinations?.length ? capsule.travel.destinations : [capsule.travel];
     if (!destinations.some(destination => destination?.latitude != null && destination?.startDate)) return;
     const today = new Date().toISOString().slice(0, 10);
@@ -162,6 +163,21 @@ export default function Outfits({ capsulesOnly = false }) {
     return addTarget.clothes.every(item => candidate.compatibleWith?.some(value => (value._id || value) === item._id));
   }) : [];
   const capsuleClothes = openCapsule?.clothes || [];
+  const packingDetailSource = packingDetailItem ? clothes.find(item => item._id === packingDetailItem._id) || packingDetailItem : null;
+  const compatibilityIds = item => new Set((item?.compatibleWith || []).map(value => value._id || value));
+  const capsuleCompatibilityStats = item => {
+    const source = clothes.find(candidate => candidate._id === item._id) || item;
+    const eligibleItems = capsuleClothes.filter(candidate => candidate._id !== source._id && candidate.category !== source.category);
+    const compatibleItems = eligibleItems.filter(candidate => {
+      return compatibilityIds(source).has(candidate._id) || compatibilityIds(candidate).has(source._id);
+    });
+    const compatibleItemIds = new Set(compatibleItems.map(candidate => candidate._id));
+    const incompatibleItems = eligibleItems.filter(candidate => !compatibleItemIds.has(candidate._id));
+    return { compatibleItems, incompatibleItems, eligibleCount: eligibleItems.length };
+  };
+  const packingDetailCompatibility = packingDetailSource ? capsuleCompatibilityStats(packingDetailSource) : { compatibleItems: [], incompatibleItems: [], eligibleCount: 0 };
+  const capsuleCompatibilityItems = packingDetailCompatibility.compatibleItems;
+  const capsuleIncompatibilityItems = packingDetailCompatibility.incompatibleItems;
   const newOutfitCandidates = capsuleClothes.filter(candidate => {
     if (newCapsuleOutfitItems.includes(candidate._id)) return true;
     if (newCapsuleOutfitItems.some(id => capsuleClothes.find(item => item._id === id)?.category === candidate.category)) return false;
@@ -352,8 +368,8 @@ export default function Outfits({ capsulesOnly = false }) {
     applyCapsuleUpdate(updatedCapsule);
     setAddingPackingItem(false);
   };
-  const openPackingSelector = () => {
-    setPackingCategory("");
+  const openPackingSelector = (category = "") => {
+    setPackingCategory(category);
     setPackingSeason("");
     setAddingPackingItem(true);
   };
@@ -459,7 +475,7 @@ export default function Outfits({ capsulesOnly = false }) {
       </article>)}
       {!capsulesOnly && outfits.map(outfit => <article className="outfit-card reviewable" key={outfit._id} role="button" tabIndex="0" onClick={() => openOutfitReview(outfit)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") openOutfitReview(outfit); }}><div className="outfit-collage">{outfit.clothes.slice(0, 4).map(item => <div key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span>{item.category}</span>}</div>)}</div><div className="outfit-card-footer"><div className="outfit-card-name">{editingOutfitId === outfit._id ? <input value={editingOutfitName} autoFocus aria-label="Nom de l’outfit" onClick={event => event.stopPropagation()} onChange={event => setEditingOutfitName(event.target.value)} onBlur={() => saveInlineOutfitName(outfit)} onKeyDown={event => { event.stopPropagation(); if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") setEditingOutfitId(null); }}/> : <><h3>{outfit.name}</h3><button type="button" aria-label={`Renommer ${outfit.name}`} title="Renommer" onClick={event => { event.stopPropagation(); startOutfitNameEdit(outfit); }}><Pencil size={15}/></button></>}</div><div className="outfit-card-meta"><span className={outfit.rating ? "rated" : ""} title="Note"><Star size={16} fill={outfit.rating ? "currentColor" : "none"}/>{outfit.rating || "–"}</span><span title={`${outfit.clothes.length} pièces`}><Shirt size={16}/>{outfit.clothes.length}</span><button type="button" className="outfit-card-delete" aria-label={`Supprimer ${outfit.name}`} title="Supprimer" onClick={event => { event.stopPropagation(); remove(outfit); }}><Trash2 size={16}/></button></div></div></article>)}
     </div>}
-    {openCapsule && <Modal title={editingCapsuleId === openCapsule._id ? <input className="inline-capsule-name" value={editingCapsuleName} autoFocus aria-label="Nom de la capsule" onChange={event => setEditingCapsuleName(event.target.value)} onBlur={() => saveInlineCapsuleName(openCapsule)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") { setEditingCapsuleName(openCapsule.name); setEditingCapsuleId(null); } }}/> : <button type="button" className="editable-capsule-name" title="Cliquer pour renommer" onClick={() => startCapsuleNameEdit(openCapsule)}>{openCapsule.name}<Pencil size={17}/></button>} onClose={() => setOpenCapsule(null)}>
+    {openCapsule && <Modal title={editingCapsuleId === openCapsule._id ? <input className="inline-capsule-name" value={editingCapsuleName} autoFocus aria-label="Nom de la capsule" onChange={event => setEditingCapsuleName(event.target.value)} onBlur={() => saveInlineCapsuleName(openCapsule)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") { setEditingCapsuleName(openCapsule.name); setEditingCapsuleId(null); } }}/> : <button type="button" className="editable-capsule-name" title="Cliquer pour renommer" onClick={() => startCapsuleNameEdit(openCapsule)}>{openCapsule.name}<Pencil size={17}/></button>} onClose={() => { setPackingDetailItem(null); setOpenCapsule(null); }}>
       <div className="capsule-detail capsule-detail-tabbed">
         <div className="capsule-detail-summary">
           <div><strong>{openCapsule.outfits.length}</strong><span>Tenues</span></div>
@@ -485,8 +501,26 @@ export default function Outfits({ capsulesOnly = false }) {
         </nav>
         <div className="capsule-detail-content">
           {capsuleDetailTab === "packing" ? <section className="packing-list packing-list-tab">
-            <header><div><h3>Liste bagages</h3><p>Cochez les pièces déjà placées dans la valise.</p></div><div className="packing-list-controls"><strong>{packedItems.length}/{openCapsule.clothes.length}</strong><button type="button" onClick={openPackingSelector}><CirclePlus size={15}/> Ajouter une pièce</button></div></header>
-            <div>{openCapsule.clothes.filter(item => !capsulePackingCategory || item.category === capsulePackingCategory).map(item => <div key={item._id} className={`packing-list-row ${packedItems.includes(item._id) ? "packed" : ""}`}><label><input type="checkbox" checked={packedItems.includes(item._id)} onChange={() => setPackedItems(current => current.includes(item._id) ? current.filter(id => id !== item._id) : [...current, item._id])}/>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <i/>}<span><b>{item.name || item.category}</b><small>{item.category}</small></span></label><button type="button" aria-label={`Retirer ${item.name || item.category} de la capsule`} onClick={() => removeItemFromCapsule(item)}><Trash2 size={14}/></button></div>)}</div>
+            <header><div><h3>Liste bagages</h3><p>Cochez les pièces déjà placées dans la valise.</p></div><div className="packing-list-controls"><strong>{packedItems.length}/{openCapsule.clothes.length}</strong><button type="button" onClick={() => openPackingSelector()}><CirclePlus size={15}/> Ajouter une pièce</button></div></header>
+            <div>
+              {openCapsule.clothes.filter(item => !capsulePackingCategory || item.category === capsulePackingCategory).map(item => {
+                const compatibility = capsuleCompatibilityStats(item);
+                const compatibilityCount = compatibility.compatibleItems.length;
+                return <div key={item._id} className={`packing-list-row ${packedItems.includes(item._id) ? "packed" : ""}`}>
+                  <label className="packing-check"><input type="checkbox" checked={packedItems.includes(item._id)} onChange={() => setPackedItems(current => current.includes(item._id) ? current.filter(id => id !== item._id) : [...current, item._id])}/><span>Marquer comme placé dans la valise</span></label>
+                  <button type="button" className="packing-item-open" onClick={() => setPackingDetailItem(item)} aria-label={`Voir les détails de ${item.name || item.category}`}>
+                    {item.imageUrl ? <img src={item.imageUrl} alt=""/> : <i/>}
+                    <span><b>{item.name || item.category}</b><small>{item.category}</small></span>
+                  </button>
+                  <strong className="packing-compatibility-score" title={`${compatibilityCount} compatibilité${compatibilityCount > 1 ? "s" : ""} sur ${compatibility.eligibleCount} pièce${compatibility.eligibleCount > 1 ? "s" : ""} associable${compatibility.eligibleCount > 1 ? "s" : ""} dans cette capsule`}><Link2 size={14}/>{compatibilityCount}/{compatibility.eligibleCount}</strong>
+                  <button type="button" className="packing-remove-item" aria-label={`Retirer ${item.name || item.category} de la capsule`} onClick={() => removeItemFromCapsule(item)}><Trash2 size={14}/></button>
+                </div>;
+              })}
+              {capsulePackingCategory && <button type="button" className="packing-add-category-card" onClick={() => openPackingSelector(capsulePackingCategory)} aria-label={`Ajouter une pièce de la catégorie ${capsulePackingCategory}`}>
+                <Plus size={30}/>
+                <b>{capsulePackingCategory === "Chaussures" ? "Ajouter des chaussures" : `Ajouter un ${capsulePackingCategory.toLowerCase()}`}</b>
+              </button>}
+            </div>
           </section> : <div ref={capsuleOutfitScrollerRef} className="capsule-outfits-list capsule-outfits-rows" tabIndex={openCapsule.outfits.length ? 0 : -1} aria-label="Tenues de la capsule. Utilisez les flèches gauche et droite pour les faire défiler.">
             {openCapsule.outfits.map(outfit => <article key={outfit._id} className={dropTargetOutfit === outfit._id ? "drop-active" : ""} onDragOver={event => { if (!draggedOutfitItem) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setDropTargetOutfit(outfit._id); } }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDropTargetOutfit(null); }} onDrop={event => { if (!draggedOutfitItem) dropPackingItem(event, outfit._id); }}>
               <header className="capsule-outfit-row-header">
@@ -504,6 +538,20 @@ export default function Outfits({ capsulesOnly = false }) {
     {replaceTarget && <Modal title={`Remplacer ${replaceTarget.item.name || replaceTarget.item.category}`} onClose={() => setReplaceTarget(null)}><p>Choisissez une pièce compatible de la catégorie {replaceTarget.item.category}.</p><div className="selector-grid replacement-grid">{replacementCandidates.map(item => <ClothingCard key={item._id} item={item} selectable onSelect={replaceCapsuleItem}/>)}</div>{!replacementCandidates.length && <p className="empty-filter-message">Aucune autre pièce compatible disponible.</p>}</Modal>}
     {addTarget && <Modal title="Ajouter une pièce à la tenue" onClose={() => setAddTarget(null)}><p>Choisissez une pièce compatible dans une catégorie absente de cette tenue.</p><div className="selector-grid replacement-grid">{additionCandidates.map(item => <ClothingCard key={item._id} item={item} selectable onSelect={addCapsuleItem}/>)}</div>{!additionCandidates.length && <p className="empty-filter-message">Aucune pièce compatible à ajouter.</p>}</Modal>}
     {addingPackingItem && <Modal title="Ajouter à la liste bagages" onClose={() => setAddingPackingItem(false)}><p>Choisissez une pièce à emporter, même si elle ne fait partie d’aucune tenue.</p><div className="packing-item-filters"><div><span>Catégories</span><div className="category-pills"><button type="button" className={!packingCategory ? "active" : ""} onClick={() => setPackingCategory("")}>Toutes</button>{categories.map(category => <button type="button" key={category} className={packingCategory === category ? "active" : ""} onClick={() => setPackingCategory(category)}>{category}</button>)}</div></div><div><span>Saisons</span><div className="category-pills"><button type="button" className={!packingSeason ? "active" : ""} onClick={() => setPackingSeason("")}>Toutes</button>{seasons.map(season => <button type="button" key={season} className={packingSeason === season ? "active" : ""} onClick={() => setPackingSeason(season)}>{season}</button>)}</div></div></div><div className="selector-grid replacement-grid">{packingCandidates.map(item => <ClothingCard key={item._id} item={item} selectable onSelect={addItemToPackingList}/>)}</div>{!packingCandidates.length && <p className="empty-filter-message">Aucune pièce ne correspond à ces filtres.</p>}</Modal>}
+    {packingDetailSource && <Modal title={packingDetailSource.name || packingDetailSource.category} onClose={() => setPackingDetailItem(null)} className="packing-item-detail-modal">
+      <section className="packing-item-detail-summary">
+        {packingDetailSource.imageUrl ? <img src={packingDetailSource.imageUrl} alt={packingDetailSource.name || packingDetailSource.category}/> : <span/>}
+        <div><span className="eyebrow">{packingDetailSource.category}</span><h3>{packingDetailSource.name || packingDetailSource.category}</h3>{[packingDetailSource.brand, packingDetailSource.color, packingDetailSource.style, packingDetailSource.size].filter(Boolean).length > 0 && <p>{[packingDetailSource.brand, packingDetailSource.color, packingDetailSource.style, packingDetailSource.size].filter(Boolean).join(" · ")}</p>}<div className="packing-item-seasons">{packingDetailSource.season?.length ? packingDetailSource.season.map(season => <span key={season}>{season}</span>) : <span>Toutes saisons</span>}</div></div>
+      </section>
+      <section className="packing-item-compatibilities">
+        <header><div><Link2 size={18}/><h3>Compatibilités dans la capsule</h3></div><strong>{capsuleCompatibilityItems.length}/{packingDetailCompatibility.eligibleCount}</strong></header>
+        {capsuleCompatibilityItems.length ? <div>{capsuleCompatibilityItems.map(item => <article key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt={item.name || item.category}/> : <span/>}<footer><b>{item.name || item.category}</b><small>{item.category}</small></footer></article>)}</div> : <p>Aucune compatibilité renseignée avec les autres pièces de cette capsule.</p>}
+      </section>
+      <section className="packing-item-compatibilities packing-item-incompatibilities">
+        <header><div><Minus size={18}/><h3>Incompatibilités dans la capsule</h3></div><strong>{capsuleIncompatibilityItems.length}/{packingDetailCompatibility.eligibleCount}</strong></header>
+        {capsuleIncompatibilityItems.length ? <div>{capsuleIncompatibilityItems.map(item => <article key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt={item.name || item.category}/> : <span/>}<footer><b>{item.name || item.category}</b><small>{item.category}</small></footer></article>)}</div> : <p>Cette pièce est compatible avec toutes les pièces associables de la capsule.</p>}
+      </section>
+    </Modal>}
     {openOutfit && <Modal title={openOutfit.name} onClose={() => setOpenOutfit(null)}><form className="outfit-review" onSubmit={saveOutfitReview}><label>Nom de la tenue<input name="name" required defaultValue={openOutfit.name} placeholder="Ex. Dîner en ville"/></label><div className="outfit-review-items">{openOutfit.clothes.map(item => <div key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt={item.name || item.category}/> : <span/>}<small>{item.name || item.category}</small></div>)}</div><fieldset><legend>Votre note</legend><div className="rating-stars" aria-label={`Note : ${reviewRating} sur 5`}>{[1,2,3,4,5].map(value => <button type="button" key={value} aria-label={`${value} étoile${value > 1 ? "s" : ""}`} onClick={() => setReviewRating(value)}><Star size={27} fill={value <= reviewRating ? "currentColor" : "none"}/></button>)}</div></fieldset><label>Retour d’expérience<textarea name="notes" rows="6" defaultValue={openOutfit.notes} placeholder="Confort, associations, occasion, améliorations…"/></label><button className="primary" disabled={reviewSaving}>{reviewSaving ? "Enregistrement…" : "Enregistrer les modifications"}</button></form></Modal>}
     {reviewCapsule && <Modal title={`Noter ${reviewCapsule.name}`} onClose={() => setReviewCapsule(null)}><form className="outfit-review" onSubmit={saveCapsuleReview}><fieldset><legend>Note globale de la capsule</legend><div className="rating-stars" aria-label={`Note : ${capsuleRating} sur 5`}>{[1,2,3,4,5].map(value => <button type="button" key={value} aria-label={`${value} étoile${value > 1 ? "s" : ""}`} onClick={() => setCapsuleRating(value)}><Star size={27} fill={value <= capsuleRating ? "currentColor" : "none"}/></button>)}</div></fieldset><label>Retour sur la capsule<textarea name="notes" rows="6" defaultValue={reviewCapsule.notes} placeholder="Variété, efficacité, pièces manquantes, bilan du voyage…"/></label><button className="primary" disabled={capsuleReviewSaving}>{capsuleReviewSaving ? "Enregistrement…" : "Enregistrer la note"}</button></form></Modal>}
     {creatingCapsuleOutfit && <Modal title="Ajouter une tenue à la capsule" onClose={() => setCreatingCapsuleOutfit(false)}><form className="stack" onSubmit={createOutfitInCapsule}><label>Nom de la tenue <small>(facultatif)</small><input name="name" autoFocus placeholder={`Tenue ${openCapsule.outfits.length + 1}`}/></label><p>Sélectionnez des pièces compatibles. Une seule pièce par catégorie peut être choisie.</p><div className="selector-grid replacement-grid">{newOutfitCandidates.map(item => <ClothingCard key={item._id} item={item} selectable selected={newCapsuleOutfitItems.includes(item._id)} onSelect={toggleNewOutfitItem}/>)}</div><button className="primary" disabled={!newCapsuleOutfitItems.length}><CirclePlus size={17}/> Ajouter la tenue</button></form></Modal>}
