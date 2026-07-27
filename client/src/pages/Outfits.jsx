@@ -1,16 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownWideNarrow, ChevronRight, CirclePlus, Luggage, Minus, MoreHorizontal, Pencil, Plus, Shirt, Sparkles, Star, Trash2 } from "lucide-react";
+import { ArrowDownWideNarrow, Check, ChevronRight, CirclePlus, Luggage, Minus, MoreHorizontal, Pencil, Plus, Shirt, Sparkles, Star, Trash2, X } from "lucide-react";
 import { api } from "../services/api";
 import { fetchItineraryWeather } from "../services/travelWeather";
 import ClothingCard from "../components/ClothingCard";
 import Modal from "../components/Modal";
 import ConfirmModal from "../components/ConfirmModal";
 import PageState from "../components/PageState";
+import { buildCompatibleCapsuleOutfits } from "../utils/capsuleOutfitCombinations";
 import { useNavigate, useParams } from "react-router";
 
 const seasons = ["Printemps", "Été", "Automne", "Hiver"];
 const categories = ["Haut", "Bas", "Inter", "Chaussures", "Accessoire", "Manteau"];
+const capsuleCategoryCounters = [
+  { category: "Haut", label: "Hauts", requirement: "tops" },
+  { category: "Bas", label: "Bas", requirement: "bottoms" },
+  { category: "Chaussures", label: "Chaussures", requirement: "shoes" },
+  { category: "Inter", label: "Inters", requirement: "inters" },
+  { category: "Manteau", label: "Manteaux", requirement: "coats" },
+];
+const capsuleDraftKey = "wearsense:capsule-draft";
 const capsuleOutfitLabel = name => name?.match(/(?:^| · )(Tenue \d+)$/)?.[1] || name;
+const outfitSelectionKey = items => items.map(item => item._id).sort().join(":");
+const outfitSeasons = outfit => Array.isArray(outfit.season) ? outfit.season : outfit.season ? [outfit.season] : [];
 
 export default function Outfits({ capsulesOnly = false }) {
   const navigate = useNavigate();
@@ -24,6 +35,7 @@ export default function Outfits({ capsulesOnly = false }) {
   const [capsules, setCapsules] = useState([]);
   const [openCapsule, setOpenCapsule] = useState(null);
   const [capsuleDetailTab, setCapsuleDetailTab] = useState("outfits");
+  const [capsulePackingCategory, setCapsulePackingCategory] = useState("");
   const [packedItems, setPackedItems] = useState([]);
   const [replaceTarget, setReplaceTarget] = useState(null);
   const [addTarget, setAddTarget] = useState(null);
@@ -47,11 +59,15 @@ export default function Outfits({ capsulesOnly = false }) {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [creatingCapsuleOutfit, setCreatingCapsuleOutfit] = useState(false);
   const [newCapsuleOutfitItems, setNewCapsuleOutfitItems] = useState([]);
+  const [generatedOutfitReview, setGeneratedOutfitReview] = useState(null);
+  const [savingGeneratedOutfits, setSavingGeneratedOutfits] = useState(false);
+  const [seasonSavingOutfitId, setSeasonSavingOutfitId] = useState(null);
   const [draggedOutfitItem, setDraggedOutfitItem] = useState(null);
   const [reorderTargetItem, setReorderTargetItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const loadRequestRef = useRef(0);
+  const capsuleOutfitScrollerRef = useRef(null);
   const load = async ({ showLoading = false } = {}) => {
     const requestId = ++loadRequestRef.current;
     if (showLoading) setLoading(true);
@@ -77,6 +93,21 @@ export default function Outfits({ capsulesOnly = false }) {
     const capsule = capsules.find(item => item._id === capsuleId);
     if (capsule) openCapsuleDetail(capsule);
   }, [capsuleId, capsules, openCapsule]);
+  useEffect(() => {
+    if (!openCapsule || capsuleDetailTab !== "outfits" || generatedOutfitReview || creatingCapsuleOutfit || openOutfit || confirmDialog) return undefined;
+    const handleCapsuleCarouselKeys = event => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable='true']")) return;
+      const scroller = capsuleOutfitScrollerRef.current;
+      const card = scroller?.querySelector(":scope > article");
+      if (!scroller || !card) return;
+      event.preventDefault();
+      const gap = Number.parseFloat(window.getComputedStyle(scroller).columnGap) || 0;
+      scroller.scrollBy({ left: (card.getBoundingClientRect().width + gap) * (event.key === "ArrowLeft" ? -1 : 1), behavior: "smooth" });
+    };
+    window.addEventListener("keydown", handleCapsuleCarouselKeys);
+    return () => window.removeEventListener("keydown", handleCapsuleCarouselKeys);
+  }, [openCapsule?._id, capsuleDetailTab, Boolean(generatedOutfitReview), creatingCapsuleOutfit, Boolean(openOutfit), Boolean(confirmDialog)]);
 
   const closeCreator = () => { setOpen(false); setSelected([]); setSelectedSeason(""); setSortByCompatibility(false); };
   const toggle = id => setSelected(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]);
@@ -103,11 +134,9 @@ export default function Outfits({ capsulesOnly = false }) {
       return selectedItem?.compatibleWith?.some(value => (value._id || value) === item._id);
     });
   }).sort((a, b) => sortByCompatibility ? (b.compatibleWith?.length || 0) - (a.compatibleWith?.length || 0) : 0);
-  const capsuleOutfitIds = new Set(capsules.flatMap(capsule => capsule.outfits.map(outfit => outfit._id || outfit)));
-  const standaloneOutfits = outfits.filter(outfit => !capsuleOutfitIds.has(outfit._id));
   const openCapsuleDetail = async capsule => {
     if (capsulesOnly && !capsuleId) { navigate(`/capsules/${capsule._id}`); return; }
-    setPackedItems([]); setCapsuleDetailTab("outfits"); setCapsuleRating(capsule.rating || 0); setCapsuleActionError(""); setOpenCapsule(capsule);
+    setPackedItems([]); setCapsuleDetailTab("outfits"); setCapsulePackingCategory(""); setCapsuleRating(capsule.rating || 0); setCapsuleActionError(""); setOpenCapsule(capsule);
     const destinations = capsule.travel?.destinations?.length ? capsule.travel.destinations : [capsule.travel];
     if (!destinations.some(destination => destination?.latitude != null && destination?.startDate)) return;
     const today = new Date().toISOString().slice(0, 10);
@@ -145,6 +174,14 @@ export default function Outfits({ capsulesOnly = false }) {
     return true;
   }) : [];
   const applyCapsuleUpdate = updatedCapsule => {
+    const previousOutfitIds = new Set((openCapsule?.outfits || []).map(outfit => outfit._id || outfit));
+    const updatedOutfitIds = new Set((updatedCapsule.outfits || []).map(outfit => outfit._id || outfit));
+    const removedOutfitIds = new Set([...previousOutfitIds].filter(id => !updatedOutfitIds.has(id)));
+    setOutfits(current => {
+      const byId = new Map(current.filter(outfit => !removedOutfitIds.has(outfit._id)).map(outfit => [outfit._id, outfit]));
+      updatedCapsule.outfits.forEach(outfit => byId.set(outfit._id, outfit));
+      return [...byId.values()].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    });
     setOpenCapsule(updatedCapsule);
     setCapsules(current => current.map(capsule => capsule._id === updatedCapsule._id ? updatedCapsule : capsule));
     setPackedItems([]);
@@ -152,6 +189,56 @@ export default function Outfits({ capsulesOnly = false }) {
   const adjustCapsuleTarget = async delta => {
     const targetPieces = Math.min(100, Math.max(1, (openCapsule.targetPieces || 15) + delta));
     applyCapsuleUpdate(await api(`/collections/${openCapsule._id}`, { method: "PUT", body: JSON.stringify({ targetPieces }) }));
+  };
+  const startGeneratedOutfitReview = () => {
+    const proposals = buildCompatibleCapsuleOutfits(openCapsule.clothes, openCapsule.outfits);
+    if (!proposals.length) {
+      setCapsuleActionError("Aucune nouvelle tenue complète et compatible ne peut être générée avec ces pièces.");
+      return;
+    }
+    setCapsuleActionError("");
+    setGeneratedOutfitReview({ proposals, index: 0, accepted: [], done: false, error: "" });
+  };
+  const answerGeneratedOutfit = accepted => {
+    setGeneratedOutfitReview(current => {
+      const currentProposal = current.proposals[current.index];
+      const currentKey = outfitSelectionKey(currentProposal);
+      const otherAccepted = current.accepted.filter(items => outfitSelectionKey(items) !== currentKey);
+      const nextAccepted = accepted ? [...otherAccepted, currentProposal] : otherAccepted;
+      const isLast = current.index === current.proposals.length - 1;
+      return { ...current, accepted: nextAccepted, index: isLast ? current.index : current.index + 1, done: isLast, error: "" };
+    });
+  };
+  const saveGeneratedOutfits = async () => {
+    if (!generatedOutfitReview.accepted.length) { setGeneratedOutfitReview(null); return; }
+    setSavingGeneratedOutfits(true);
+    try {
+      const updated = await api(`/collections/${openCapsule._id}/outfits/bulk`, {
+        method: "POST",
+        body: JSON.stringify({ outfits: generatedOutfitReview.accepted.map(items => ({ clothes: items.map(item => item._id) })) })
+      });
+      applyCapsuleUpdate(updated);
+      setCapsuleDetailTab("outfits");
+      setGeneratedOutfitReview(null);
+    } catch (error) {
+      setGeneratedOutfitReview(current => ({ ...current, error: error.message }));
+    } finally { setSavingGeneratedOutfits(false); }
+  };
+  const toggleOutfitSeason = async (outfit, season) => {
+    const currentSeasons = outfitSeasons(outfit);
+    const nextSeasons = currentSeasons.includes(season) ? currentSeasons.filter(value => value !== season) : [...currentSeasons, season];
+    setSeasonSavingOutfitId(outfit._id);
+    setCapsuleActionError("");
+    try {
+      const updated = await api(`/outfits/${outfit._id}`, { method: "PUT", body: JSON.stringify({ season: nextSeasons }) });
+      setOutfits(current => current.map(item => item._id === updated._id ? updated : item));
+      setCapsules(current => current.map(capsule => ({ ...capsule, outfits: capsule.outfits.map(item => item._id === updated._id ? updated : item) })));
+      setOpenCapsule(current => current ? { ...current, outfits: current.outfits.map(item => item._id === updated._id ? updated : item) } : current);
+    } catch (error) {
+      setCapsuleActionError(error.message || "La saison de cette tenue n’a pas pu être modifiée.");
+    } finally {
+      setSeasonSavingOutfitId(null);
+    }
   };
   const replaceCapsuleItem = async replacementId => {
     const updatedCapsule = await api(`/collections/${openCapsule._id}/outfits/${replaceTarget.outfit._id}/replace`, { method: "PUT", body: JSON.stringify({ itemId: replaceTarget.item._id, replacementId }) });
@@ -197,6 +284,45 @@ export default function Outfits({ capsulesOnly = false }) {
     setEditingCapsuleId(capsule._id);
     setEditingCapsuleName(capsule.name);
   };
+
+  const editCapsule = capsule => {
+    const selectedIds = capsule.clothes.map(item => item._id);
+    const destinations = capsule.travel?.destinations?.length
+      ? capsule.travel.destinations
+      : capsule.travel?.destination
+        ? [capsule.travel]
+        : [];
+    const firstSeason = capsule.outfits.flatMap(outfitSeasons)[0] || "";
+    localStorage.setItem(capsuleDraftKey, JSON.stringify({
+      version: 1,
+      editingCapsuleId: capsule._id,
+      capsuleMode: capsule.capsuleMode || (destinations.length ? "travel" : "simple"),
+      stage: "suggest",
+      count: Math.max(1, capsule.outfits.length || 1),
+      targetPieces: capsule.targetPieces || capsule.clothes.length || 15,
+      name: capsule.name || "",
+      season: firstSeason,
+      category: "",
+      selected: selectedIds,
+      included: selectedIds,
+      selectionBaseline: selectedIds,
+      suggestionCategory: "",
+      suggestionSeason: "",
+      suggestionSort: "",
+      outfits: [],
+      generation: 0,
+      destinations: destinations.map((destination, index) => ({
+        id: `edit-${index}-${Date.now()}`,
+        query: destination.destination || "",
+        ...destination,
+      })),
+      weather: capsule.weather || null,
+      workshopLocks: [],
+      requirementOverrides: capsule.packingRequirements || {},
+      updatedAt: new Date().toISOString(),
+    }));
+    navigate("/capsules/new");
+  };
   const saveInlineCapsuleName = async capsule => {
     const name = editingCapsuleName.trim();
     setEditingCapsuleId(null);
@@ -209,7 +335,17 @@ export default function Outfits({ capsulesOnly = false }) {
     setConfirmDialog({ title: "Retirer cette pièce ?", message: `${item.name || item.category} sera retiré uniquement de la tenue « ${outfit.name} ».`, label: "Retirer la pièce", action: async () => applyCapsuleUpdate(await api(`/collections/${openCapsule._id}/outfits/${outfit._id}/items/${item._id}`, { method: "DELETE" })) });
   };
   const removeItemFromCapsule = async item => {
-    setConfirmDialog({ title: "Retirer de toute la capsule ?", message: `${item.name || item.category} sera supprimé de la liste bagages et de toutes les tenues qui l’utilisent.`, label: "Retirer de la capsule", action: async () => applyCapsuleUpdate(await api(`/collections/${openCapsule._id}/items/${item._id}`, { method: "DELETE" })) });
+    const affectedOutfits = openCapsule.outfits.filter(outfit => outfit.clothes.some(clothing => clothing._id === item._id));
+    setConfirmDialog({
+      title: "Retirer cette pièce de la capsule ?",
+      message: `${item.name || item.category} sera retiré des bagages. ${affectedOutfits.length ? `${affectedOutfits.length} tenue${affectedOutfits.length > 1 ? "s" : ""} qui l’utilise${affectedOutfits.length > 1 ? "nt" : ""} sera${affectedOutfits.length > 1 ? "ont" : ""} également supprimée${affectedOutfits.length > 1 ? "s" : ""}.` : "Aucune tenue ne sera supprimée."}`,
+      label: "Retirer la pièce",
+      action: async () => {
+        const updated = await api(`/collections/${openCapsule._id}/items/${item._id}`, { method: "DELETE" });
+        setPackedItems(current => current.filter(id => id !== item._id));
+        applyCapsuleUpdate(updated);
+      }
+    });
   };
   const addItemToPackingList = async itemId => {
     const updatedCapsule = await api(`/collections/${openCapsule._id}/items`, { method: "PUT", body: JSON.stringify({ itemId }) });
@@ -296,37 +432,66 @@ export default function Outfits({ capsulesOnly = false }) {
   };
 
   return <>
-    {!capsuleId && <header className="page-header"><h1>{capsulesOnly ? "Capsules bagage" : "Outfits"}</h1>{capsulesOnly ? <button className="primary" onClick={() => navigate("/capsules/new")}><Plus size={18}/> Créer</button> : <details className="create-menu"><summary><Plus size={18}/> Créer</summary><div><button type="button" onClick={() => navigate("/outfits/new")}><Plus size={17}/> Une tenue</button><button type="button" onClick={() => navigate("/outfits/assist")}><Sparkles size={17}/> Tenue assistée</button><button type="button" onClick={() => navigate("/outfits/new/multiple")}><Plus size={17}/> Plusieurs tenues</button></div></details>}</header>}
+    {!capsuleId && <header className="page-header"><h1>{capsulesOnly ? "Capsules" : "Outfits"}</h1>{capsulesOnly ? <button className="primary" onClick={() => navigate("/capsules/new")}><Plus size={18}/> Créer</button> : <details className="create-menu"><summary><Plus size={18}/> Créer</summary><div><button type="button" onClick={() => navigate("/outfits/new")}><Plus size={17}/> Une tenue</button><button type="button" onClick={() => navigate("/outfits/assist")}><Sparkles size={17}/> Tenue assistée</button><button type="button" onClick={() => navigate("/outfits/new/multiple")}><Plus size={17}/> Plusieurs tenues</button></div></details>}</header>}
     {!capsuleId && loading && <PageState loading title={capsulesOnly ? "Chargement des capsules…" : "Chargement des tenues…"}/>}
     {!capsuleId && !loading && loadError && <PageState title="Le contenu n’a pas pu être chargé" message="Vos données sont intactes. Réessayez dans un instant." onAction={() => load({ showLoading: true })}/>}
     {capsuleId && loading && <PageState loading title="Chargement de la capsule…"/>}
     {capsuleId && !loading && loadError && <PageState title="La capsule n’a pas pu être chargée" message={loadError} onAction={() => load({ showLoading: true })}/>}
-    {!capsuleId && !loading && !loadError && ((capsulesOnly && capsules.length === 0) || (!capsulesOnly && standaloneOutfits.length === 0)) && <PageState title={capsulesOnly ? "Aucune capsule" : "Aucune tenue"} message={capsulesOnly ? "Préparez votre première capsule pour un voyage." : "Créez une tenue à partir des pièces de votre garde-robe."} actionLabel={capsulesOnly ? "Créer une capsule" : "Créer une tenue"} actionIcon={Plus} onAction={() => navigate(capsulesOnly ? "/capsules/new" : "/outfits/new")}/>}
+    {!capsuleId && !loading && !loadError && ((capsulesOnly && capsules.length === 0) || (!capsulesOnly && outfits.length === 0)) && <PageState title={capsulesOnly ? "Aucune capsule" : "Aucune tenue"} message={capsulesOnly ? "Préparez votre première capsule pour un voyage." : "Créez une tenue à partir des pièces de votre garde-robe."} actionLabel={capsulesOnly ? "Créer une capsule" : "Créer une tenue"} actionIcon={Plus} onAction={() => navigate(capsulesOnly ? "/capsules/new" : "/outfits/new")}/>}
     {!capsuleId && !loading && !loadError && <div className={`outfit-grid ${!capsulesOnly ? "outfit-page-grid" : ""}`}>
-      {capsulesOnly && capsules.map(capsule => <article className="outfit-card reviewable capsule-card" key={capsule._id} role="button" tabIndex="0" onClick={() => openCapsuleDetail(capsule)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCapsuleDetail(capsule); } }}><div className="outfit-collage">{capsule.clothes.slice(0, 4).map(item => <div key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span>{item.category}</span>}</div>)}</div><div className="outfit-card-footer"><div className="outfit-card-name">{editingCapsuleId === capsule._id ? <input value={editingCapsuleName} autoFocus aria-label="Nom de la capsule" onClick={event => event.stopPropagation()} onChange={event => setEditingCapsuleName(event.target.value)} onBlur={() => saveInlineCapsuleName(capsule)} onKeyDown={event => { event.stopPropagation(); if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") setEditingCapsuleId(null); }}/> : <><h3>{capsule.name}</h3><button type="button" aria-label={`Renommer ${capsule.name}`} title="Renommer" onClick={event => { event.stopPropagation(); startCapsuleNameEdit(capsule); }}><Pencil size={15}/></button></>}</div><div className="outfit-card-meta"><button type="button" className={capsule.rating ? "rated" : ""} aria-label="Noter la capsule" title="Note" onClick={event => { event.stopPropagation(); openCapsuleReview(capsule); }}><Star size={16} fill={capsule.rating ? "currentColor" : "none"}/>{capsule.rating || "–"}</button><span title={`${capsule.outfits.length} tenues`}><Luggage size={16}/>{capsule.outfits.length}</span><span title={`${capsule.clothes.length} pièces`}><Shirt size={16}/>{capsule.clothes.length}</span><button type="button" className="outfit-card-delete" aria-label={`Supprimer la capsule ${capsule.name}`} title="Supprimer" onClick={event => { event.stopPropagation(); removeCapsule(capsule); }}><Trash2 size={16}/></button><ChevronRight size={20}/></div></div></article>)}
-      {!capsulesOnly && standaloneOutfits.map(outfit => <article className="outfit-card reviewable" key={outfit._id} role="button" tabIndex="0" onClick={() => openOutfitReview(outfit)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") openOutfitReview(outfit); }}><div className="outfit-collage">{outfit.clothes.slice(0, 4).map(item => <div key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span>{item.category}</span>}</div>)}</div><div className="outfit-card-footer"><div className="outfit-card-name">{editingOutfitId === outfit._id ? <input value={editingOutfitName} autoFocus aria-label="Nom de l’outfit" onClick={event => event.stopPropagation()} onChange={event => setEditingOutfitName(event.target.value)} onBlur={() => saveInlineOutfitName(outfit)} onKeyDown={event => { event.stopPropagation(); if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") setEditingOutfitId(null); }}/> : <><h3>{outfit.name}</h3><button type="button" aria-label={`Renommer ${outfit.name}`} title="Renommer" onClick={event => { event.stopPropagation(); startOutfitNameEdit(outfit); }}><Pencil size={15}/></button></>}</div><div className="outfit-card-meta"><span className={outfit.rating ? "rated" : ""} title="Note"><Star size={16} fill={outfit.rating ? "currentColor" : "none"}/>{outfit.rating || "–"}</span><span title={`${outfit.clothes.length} pièces`}><Shirt size={16}/>{outfit.clothes.length}</span><button type="button" className="outfit-card-delete" aria-label={`Supprimer ${outfit.name}`} title="Supprimer" onClick={event => { event.stopPropagation(); remove(outfit); }}><Trash2 size={16}/></button></div></div></article>)}
+      {capsulesOnly && capsules.map(capsule => <article className="outfit-card reviewable capsule-card" key={capsule._id} role="button" tabIndex="0" onClick={() => openCapsuleDetail(capsule)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCapsuleDetail(capsule); } }}>
+        <div className="capsule-card-media">
+          <div className="outfit-collage">{capsule.clothes.slice(0, 4).map(item => <div key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span>{item.category}</span>}</div>)}</div>
+          <div className="capsule-card-actions">
+            <button type="button" aria-label={`Renommer ${capsule.name}`} title="Renommer" onClick={event => { event.stopPropagation(); startCapsuleNameEdit(capsule); }}><Pencil size={16}/></button>
+            <button type="button" className="danger" aria-label={`Supprimer la capsule ${capsule.name}`} title="Supprimer" onClick={event => { event.stopPropagation(); removeCapsule(capsule); }}><Trash2 size={16}/></button>
+          </div>
+        </div>
+        <div className="outfit-card-footer capsule-card-footer">
+          <div className="outfit-card-name">{editingCapsuleId === capsule._id ? <input value={editingCapsuleName} autoFocus aria-label="Nom de la capsule" onClick={event => event.stopPropagation()} onChange={event => setEditingCapsuleName(event.target.value)} onBlur={() => saveInlineCapsuleName(capsule)} onKeyDown={event => { event.stopPropagation(); if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") setEditingCapsuleId(null); }}/> : <h3>{capsule.name}</h3>}</div>
+          <div className="capsule-card-details">
+            <button type="button" className={capsule.rating ? "rated" : ""} aria-label="Noter la capsule" title="Note" onClick={event => { event.stopPropagation(); openCapsuleReview(capsule); }}><Star size={16} fill={capsule.rating ? "currentColor" : "none"}/>{capsule.rating || "–"}</button>
+            <span><Luggage size={16}/>{capsule.outfits.length} tenue{capsule.outfits.length > 1 ? "s" : ""}</span>
+            <span><Shirt size={16}/>{capsule.clothes.length} pièce{capsule.clothes.length > 1 ? "s" : ""}</span>
+            <ChevronRight className="capsule-card-chevron" size={21}/>
+          </div>
+        </div>
+      </article>)}
+      {!capsulesOnly && outfits.map(outfit => <article className="outfit-card reviewable" key={outfit._id} role="button" tabIndex="0" onClick={() => openOutfitReview(outfit)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") openOutfitReview(outfit); }}><div className="outfit-collage">{outfit.clothes.slice(0, 4).map(item => <div key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span>{item.category}</span>}</div>)}</div><div className="outfit-card-footer"><div className="outfit-card-name">{editingOutfitId === outfit._id ? <input value={editingOutfitName} autoFocus aria-label="Nom de l’outfit" onClick={event => event.stopPropagation()} onChange={event => setEditingOutfitName(event.target.value)} onBlur={() => saveInlineOutfitName(outfit)} onKeyDown={event => { event.stopPropagation(); if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") setEditingOutfitId(null); }}/> : <><h3>{outfit.name}</h3><button type="button" aria-label={`Renommer ${outfit.name}`} title="Renommer" onClick={event => { event.stopPropagation(); startOutfitNameEdit(outfit); }}><Pencil size={15}/></button></>}</div><div className="outfit-card-meta"><span className={outfit.rating ? "rated" : ""} title="Note"><Star size={16} fill={outfit.rating ? "currentColor" : "none"}/>{outfit.rating || "–"}</span><span title={`${outfit.clothes.length} pièces`}><Shirt size={16}/>{outfit.clothes.length}</span><button type="button" className="outfit-card-delete" aria-label={`Supprimer ${outfit.name}`} title="Supprimer" onClick={event => { event.stopPropagation(); remove(outfit); }}><Trash2 size={16}/></button></div></div></article>)}
     </div>}
-    {openCapsule && <Modal title={openCapsule.name} onClose={() => setOpenCapsule(null)}>
+    {openCapsule && <Modal title={editingCapsuleId === openCapsule._id ? <input className="inline-capsule-name" value={editingCapsuleName} autoFocus aria-label="Nom de la capsule" onChange={event => setEditingCapsuleName(event.target.value)} onBlur={() => saveInlineCapsuleName(openCapsule)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") { setEditingCapsuleName(openCapsule.name); setEditingCapsuleId(null); } }}/> : <button type="button" className="editable-capsule-name" title="Cliquer pour renommer" onClick={() => startCapsuleNameEdit(openCapsule)}>{openCapsule.name}<Pencil size={17}/></button>} onClose={() => setOpenCapsule(null)}>
       <div className="capsule-detail capsule-detail-tabbed">
         <div className="capsule-detail-summary">
           <div><strong>{openCapsule.outfits.length}</strong><span>Tenues</span></div>
           <div><strong>{openCapsule.clothes.length}</strong><span>Pièces</span></div>
           {openCapsule.capsuleMode === "simple" && <div className="capsule-target-editor"><span>Objectif</span><button type="button" aria-label="Réduire l’objectif de pièces" onClick={() => adjustCapsuleTarget(-1)}><Minus size={14}/></button><strong>{openCapsule.targetPieces || 15}</strong><button type="button" aria-label="Augmenter l’objectif de pièces" onClick={() => adjustCapsuleTarget(1)}><Plus size={14}/></button></div>}
-          <button type="button" onClick={() => { setNewCapsuleOutfitItems([]); setCreatingCapsuleOutfit(true); }}><CirclePlus size={16}/> Ajouter une tenue</button>
+          <div className="capsule-category-summary" aria-label="Répartition des pièces par catégorie">
+            {capsuleCategoryCounters.map(counter => {
+              const current = openCapsule.clothes.filter(item => item.category === counter.category).length;
+              const target = openCapsule.packingRequirements?.[counter.requirement];
+              const active = capsuleDetailTab === "packing" && capsulePackingCategory === counter.category;
+              return <button type="button" key={counter.category} className={active ? "active" : ""} aria-pressed={active} onClick={() => {
+                setCapsuleDetailTab("packing");
+                setCapsulePackingCategory(active ? "" : counter.category);
+              }}><b>{current}{Number.isFinite(target) ? `/${target}` : ""}</b> {counter.label}</button>;
+            })}
+          </div>
+          <div className="capsule-detail-actions"><button type="button" className="capsule-edit-button" onClick={() => editCapsule(openCapsule)}><Pencil size={16}/> Modifier la capsule</button><button type="button" onClick={startGeneratedOutfitReview}><Sparkles size={16}/> Générer les tenues</button><button type="button" onClick={() => { setNewCapsuleOutfitItems([]); setCreatingCapsuleOutfit(true); }}><CirclePlus size={16}/> Ajouter une tenue</button></div>
         </div>
         {capsuleActionError && <p className="capsule-action-error">{capsuleActionError}</p>}
         <nav className="capsule-detail-tabs" aria-label="Contenu de la capsule">
           <button type="button" className={capsuleDetailTab === "outfits" ? "active" : ""} aria-pressed={capsuleDetailTab === "outfits"} onClick={() => setCapsuleDetailTab("outfits")}>Tenues <span>{openCapsule.outfits.length}</span></button>
-          <button type="button" className={capsuleDetailTab === "packing" ? "active" : ""} aria-pressed={capsuleDetailTab === "packing"} onClick={() => setCapsuleDetailTab("packing")}>Bagages <span>{openCapsule.clothes.length}</span></button>
+          <button type="button" className={capsuleDetailTab === "packing" ? "active" : ""} aria-pressed={capsuleDetailTab === "packing"} onClick={() => { setCapsuleDetailTab("packing"); setCapsulePackingCategory(""); }}>Bagages <span>{openCapsule.clothes.length}</span></button>
         </nav>
         <div className="capsule-detail-content">
           {capsuleDetailTab === "packing" ? <section className="packing-list packing-list-tab">
             <header><div><h3>Liste bagages</h3><p>Cochez les pièces déjà placées dans la valise.</p></div><div className="packing-list-controls"><strong>{packedItems.length}/{openCapsule.clothes.length}</strong><button type="button" onClick={openPackingSelector}><CirclePlus size={15}/> Ajouter une pièce</button></div></header>
-            <div>{openCapsule.clothes.map(item => <div key={item._id} className={`packing-list-row ${packedItems.includes(item._id) ? "packed" : ""}`}><label><input type="checkbox" checked={packedItems.includes(item._id)} onChange={() => setPackedItems(current => current.includes(item._id) ? current.filter(id => id !== item._id) : [...current, item._id])}/>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <i/>}<span><b>{item.name || item.category}</b><small>{item.category}</small></span></label><button type="button" aria-label={`Retirer ${item.name || item.category} de la capsule`} onClick={() => removeItemFromCapsule(item)}><Trash2 size={14}/></button></div>)}</div>
-          </section> : <div className="capsule-outfits-list capsule-outfits-rows">
+            <div>{openCapsule.clothes.filter(item => !capsulePackingCategory || item.category === capsulePackingCategory).map(item => <div key={item._id} className={`packing-list-row ${packedItems.includes(item._id) ? "packed" : ""}`}><label><input type="checkbox" checked={packedItems.includes(item._id)} onChange={() => setPackedItems(current => current.includes(item._id) ? current.filter(id => id !== item._id) : [...current, item._id])}/>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <i/>}<span><b>{item.name || item.category}</b><small>{item.category}</small></span></label><button type="button" aria-label={`Retirer ${item.name || item.category} de la capsule`} onClick={() => removeItemFromCapsule(item)}><Trash2 size={14}/></button></div>)}</div>
+          </section> : <div ref={capsuleOutfitScrollerRef} className="capsule-outfits-list capsule-outfits-rows" tabIndex={openCapsule.outfits.length ? 0 : -1} aria-label="Tenues de la capsule. Utilisez les flèches gauche et droite pour les faire défiler.">
             {openCapsule.outfits.map(outfit => <article key={outfit._id} className={dropTargetOutfit === outfit._id ? "drop-active" : ""} onDragOver={event => { if (!draggedOutfitItem) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setDropTargetOutfit(outfit._id); } }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDropTargetOutfit(null); }} onDrop={event => { if (!draggedOutfitItem) dropPackingItem(event, outfit._id); }}>
               <header className="capsule-outfit-row-header">
                 {editingOutfitId === outfit._id ? <input className="inline-outfit-name" value={editingOutfitName} autoFocus onChange={event => setEditingOutfitName(event.target.value)} onBlur={() => saveInlineOutfitName(outfit)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") setEditingOutfitId(null); }}/> : <button type="button" className="editable-outfit-name" title="Cliquer pour renommer" onClick={() => startOutfitNameEdit(outfit)}>{capsuleOutfitLabel(outfit.name)}<Pencil size={14}/></button>}
+                <div className="capsule-outfit-seasons" aria-label={`Saisons de ${capsuleOutfitLabel(outfit.name)}`}>{seasons.map(season => <button type="button" key={season} className={outfitSeasons(outfit).includes(season) ? "active" : ""} aria-pressed={outfitSeasons(outfit).includes(season)} disabled={seasonSavingOutfitId === outfit._id} onClick={() => toggleOutfitSeason(outfit, season)}>{season}</button>)}</div>
                 <button type="button" className={`capsule-rating ${outfit.rating ? "rated" : ""}`} onClick={() => openOutfitReview(outfit)} aria-label={`Noter ${capsuleOutfitLabel(outfit.name)}`}><Star size={15} fill={outfit.rating ? "currentColor" : "none"}/>{outfit.rating || "–"}</button>
               </header>
               <div className="capsule-outfit-items">{outfit.clothes.map(item => <div key={item._id} draggable onDragStart={event => { event.stopPropagation(); setDraggedOutfitItem({ outfitId: outfit._id, itemId: item._id }); event.dataTransfer.setData("application/x-outfit-item", item._id); event.dataTransfer.effectAllowed = "move"; }} onDragOver={event => { if (draggedOutfitItem?.outfitId === outfit._id) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = "move"; setReorderTargetItem(`${outfit._id}:${item._id}`); } }} onDrop={event => reorderOutfitItems(event, outfit, item._id)} onDragEnd={() => { setDraggedOutfitItem(null); setReorderTargetItem(null); }} className={`capsule-outfit-item reorderable ${reorderTargetItem === `${outfit._id}:${item._id}` ? "reorder-target" : ""}`}>{item.imageUrl ? <img src={item.imageUrl} alt={item.name || item.category}/> : <span>{item.category}</span>}<small>{item.category}</small><div className="capsule-item-actions"><button type="button" aria-label={`Remplacer ${item.name || item.category}`} onClick={() => setReplaceTarget({ outfit, item })}><Pencil size={14}/></button><button type="button" className="remove" aria-label={`Retirer ${item.name || item.category}`} onClick={() => removeCapsuleItem(outfit, item)}><Trash2 size={14}/></button></div></div>)}</div>
@@ -342,6 +507,14 @@ export default function Outfits({ capsulesOnly = false }) {
     {openOutfit && <Modal title={openOutfit.name} onClose={() => setOpenOutfit(null)}><form className="outfit-review" onSubmit={saveOutfitReview}><label>Nom de la tenue<input name="name" required defaultValue={openOutfit.name} placeholder="Ex. Dîner en ville"/></label><div className="outfit-review-items">{openOutfit.clothes.map(item => <div key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt={item.name || item.category}/> : <span/>}<small>{item.name || item.category}</small></div>)}</div><fieldset><legend>Votre note</legend><div className="rating-stars" aria-label={`Note : ${reviewRating} sur 5`}>{[1,2,3,4,5].map(value => <button type="button" key={value} aria-label={`${value} étoile${value > 1 ? "s" : ""}`} onClick={() => setReviewRating(value)}><Star size={27} fill={value <= reviewRating ? "currentColor" : "none"}/></button>)}</div></fieldset><label>Retour d’expérience<textarea name="notes" rows="6" defaultValue={openOutfit.notes} placeholder="Confort, associations, occasion, améliorations…"/></label><button className="primary" disabled={reviewSaving}>{reviewSaving ? "Enregistrement…" : "Enregistrer les modifications"}</button></form></Modal>}
     {reviewCapsule && <Modal title={`Noter ${reviewCapsule.name}`} onClose={() => setReviewCapsule(null)}><form className="outfit-review" onSubmit={saveCapsuleReview}><fieldset><legend>Note globale de la capsule</legend><div className="rating-stars" aria-label={`Note : ${capsuleRating} sur 5`}>{[1,2,3,4,5].map(value => <button type="button" key={value} aria-label={`${value} étoile${value > 1 ? "s" : ""}`} onClick={() => setCapsuleRating(value)}><Star size={27} fill={value <= capsuleRating ? "currentColor" : "none"}/></button>)}</div></fieldset><label>Retour sur la capsule<textarea name="notes" rows="6" defaultValue={reviewCapsule.notes} placeholder="Variété, efficacité, pièces manquantes, bilan du voyage…"/></label><button className="primary" disabled={capsuleReviewSaving}>{capsuleReviewSaving ? "Enregistrement…" : "Enregistrer la note"}</button></form></Modal>}
     {creatingCapsuleOutfit && <Modal title="Ajouter une tenue à la capsule" onClose={() => setCreatingCapsuleOutfit(false)}><form className="stack" onSubmit={createOutfitInCapsule}><label>Nom de la tenue <small>(facultatif)</small><input name="name" autoFocus placeholder={`Tenue ${openCapsule.outfits.length + 1}`}/></label><p>Sélectionnez des pièces compatibles. Une seule pièce par catégorie peut être choisie.</p><div className="selector-grid replacement-grid">{newOutfitCandidates.map(item => <ClothingCard key={item._id} item={item} selectable selected={newCapsuleOutfitItems.includes(item._id)} onSelect={toggleNewOutfitItem}/>)}</div><button className="primary" disabled={!newCapsuleOutfitItems.length}><CirclePlus size={17}/> Ajouter la tenue</button></form></Modal>}
+    {generatedOutfitReview && <div className="wizard-backdrop"><section className="capsule-outfit-review-wizard" role="dialog" aria-modal="true" aria-labelledby="generated-outfit-title">
+      <header><div><span className="eyebrow">Tenues possibles</span><h2 id="generated-outfit-title">{generatedOutfitReview.done ? "Votre sélection" : `Tenue ${generatedOutfitReview.index + 1} sur ${generatedOutfitReview.proposals.length}`}</h2></div><button type="button" className="wizard-close" aria-label="Fermer" onClick={() => setGeneratedOutfitReview(null)}><X size={22}/></button></header>
+      {!generatedOutfitReview.done ? <>
+        <div className="wizard-progress"><span style={{ width: `${((generatedOutfitReview.index + 1) / generatedOutfitReview.proposals.length) * 100}%` }}/></div>
+        <div className="generated-outfit-preview">{generatedOutfitReview.proposals[generatedOutfitReview.index].map(item => <figure key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt={item.name || item.category}/> : <span/>}<figcaption>{item.category}</figcaption></figure>)}</div>
+        <footer><button type="button" className="generated-reject" onClick={() => answerGeneratedOutfit(false)}><X size={20}/> Non</button><span>{generatedOutfitReview.accepted.length} validée{generatedOutfitReview.accepted.length > 1 ? "s" : ""}</span><button type="button" className="generated-accept" onClick={() => answerGeneratedOutfit(true)}><Check size={20}/> Oui</button></footer>
+      </> : <div className="generated-outfit-summary"><strong>{generatedOutfitReview.accepted.length}</strong><p>tenue{generatedOutfitReview.accepted.length > 1 ? "s" : ""} validée{generatedOutfitReview.accepted.length > 1 ? "s" : ""}</p>{generatedOutfitReview.error && <p className="capsule-action-error">{generatedOutfitReview.error}</p>}<button type="button" className="primary" disabled={savingGeneratedOutfits} onClick={saveGeneratedOutfits}>{savingGeneratedOutfits ? "Enregistrement…" : generatedOutfitReview.accepted.length ? `Enregistrer ${generatedOutfitReview.accepted.length} tenue${generatedOutfitReview.accepted.length > 1 ? "s" : ""}` : "Terminer"}</button></div>}
+    </section></div>}
     {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} confirmLabel={confirmDialog.label} loading={confirmLoading} onClose={() => setConfirmDialog(null)} onConfirm={confirmCurrentAction}/>}
     {open && <Modal title="Créer un outfit" onClose={closeCreator}><form onSubmit={save}>
       <div className="form-grid"><label>Nom<input name="name" required/></label><label>Occasion<input name="occasion" placeholder="Travail, soirée…"/></label></div>

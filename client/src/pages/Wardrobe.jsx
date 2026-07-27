@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FolderPlus, LoaderCircle, Luggage, MoreHorizontal, Network, Plus, RotateCcw, Tags } from "lucide-react";
+import { FolderPlus, LoaderCircle, Luggage, MoreHorizontal, Network, Plus, RotateCcw, Sparkles, Tags } from "lucide-react";
 import { api, uploadImage } from "../services/api";
 import ClothingCard from "../components/ClothingCard";
 import ImageDropzone from "../components/ImageDropzone";
@@ -28,6 +28,8 @@ export default function Wardrobe() {
   const [compatibilityTarget, setCompatibilityTarget] = useState(null);
   const [compatibilityCatalog, setCompatibilityCatalog] = useState([]);
   const [loadingCompatibilityList, setLoadingCompatibilityList] = useState(false);
+  const [outfitCatalog, setOutfitCatalog] = useState([]);
+  const [loadingOutfitList, setLoadingOutfitList] = useState(false);
   const [showCompatibilityWizard, setShowCompatibilityWizard] = useState(false);
   const [sortByCompatibility, setSortByCompatibility] = useState(false);
   const [sortByLeastCompatibility, setSortByLeastCompatibility] = useState(false);
@@ -46,6 +48,7 @@ export default function Wardrobe() {
   const loadedOnceRef = useRef(false);
   const loadRequestRef = useRef(0);
   const catalogCacheRef = useRef(null);
+  const outfitCacheRef = useRef(null);
   const imageDisplaySaveRef = useRef(null);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const unclassifiedItems = items.filter(item => !item.category || !item.season?.length);
@@ -157,13 +160,22 @@ useEffect(() => () => window.clearTimeout(imageDisplaySaveRef.current), []);
     setImageFile(undefined);
     setError("");
     setCompatibilityCatalog(catalogCacheRef.current || []);
+    setOutfitCatalog(outfitCacheRef.current || []);
     if (!item._id) return;
-    if (catalogCacheRef.current) return;
-    setLoadingCompatibilityList(true);
-    api("/clothes")
-      .then(allItems => { catalogCacheRef.current = allItems; setCompatibilityCatalog(allItems); })
-      .catch(err => setError(err.message))
-      .finally(() => setLoadingCompatibilityList(false));
+    if (!catalogCacheRef.current) {
+      setLoadingCompatibilityList(true);
+      api("/clothes")
+        .then(allItems => { catalogCacheRef.current = allItems; setCompatibilityCatalog(allItems); })
+        .catch(err => setError(err.message))
+        .finally(() => setLoadingCompatibilityList(false));
+    }
+    if (!outfitCacheRef.current) {
+      setLoadingOutfitList(true);
+      api("/outfits")
+        .then(allOutfits => { outfitCacheRef.current = allOutfits; setOutfitCatalog(allOutfits); })
+        .catch(err => setError(err.message))
+        .finally(() => setLoadingOutfitList(false));
+    }
   };
   const toggleEditingSeason = async season => {
     if (!editing?._id || seasonSaving) return;
@@ -241,6 +253,7 @@ useEffect(() => () => window.clearTimeout(imageDisplaySaveRef.current), []);
 
   const compatibleIds = new Set((editing?.compatibleWith || []).map(value => value._id || value));
   const compatibleItems = compatibilityCatalog.filter(item => compatibleIds.has(item._id));
+  const itemOutfits = editing?._id ? outfitCatalog.filter(outfit => outfit.clothes.some(item => item._id === editing._id)) : [];
   const hasActiveFilters = selectedCategories.length > 0 || selectedSeasons.length > 0;
   const resetFilters = () => {
     setSelectedCategories([]);
@@ -304,6 +317,10 @@ useEffect(() => () => window.clearTimeout(imageDisplaySaveRef.current), []);
     {editing._id && <section className="clothing-compatibility-list full" aria-labelledby="clothing-compatibility-title">
       <header><div><Network size={18}/><h3 id="clothing-compatibility-title">Pièces compatibles</h3></div><div className="compatibility-list-actions"><strong>{editing.compatibleWith?.length || 0}</strong><button type="button" onClick={redoCompatibility}><RotateCcw size={15}/> Refaire les compatibilités</button></div></header>
       {loadingCompatibilityList ? <p className="compatibility-list-status"><LoaderCircle className="spin" size={18}/> Chargement…</p> : compatibleItems.length ? <div>{compatibleItems.map(item => <article key={item._id}>{item.imageUrl ? <NormalizedClothingImage item={item} alt={item.name || item.category}/> : <span/>}<footer><b>{item.name || item.category}</b><small>{item.category}</small></footer></article>)}</div> : <p className="compatibility-list-status">Aucune pièce compatible renseignée.</p>}
+    </section>}
+    {editing._id && <section className="clothing-outfit-usage full" aria-labelledby="clothing-outfits-title">
+      <header><div><Sparkles size={18}/><h3 id="clothing-outfits-title">Présente dans les tenues</h3></div><strong>{itemOutfits.length}</strong></header>
+      {loadingOutfitList ? <p className="outfit-usage-status"><LoaderCircle className="spin" size={18}/> Chargement…</p> : itemOutfits.length ? <div>{itemOutfits.map(outfit => <article key={outfit._id}><div className="outfit-usage-images">{outfit.clothes.slice(0, 5).map(item => <figure key={item._id} className={item._id === editing._id ? "current" : ""}>{item.imageUrl ? <NormalizedClothingImage item={item} alt=""/> : <span/>}</figure>)}</div><footer><b>{outfit.name}</b><small>{outfit.clothes.length} pièce{outfit.clothes.length > 1 ? "s" : ""}{outfit.season?.length ? ` · ${Array.isArray(outfit.season) ? outfit.season.join(" · ") : outfit.season}` : ""}</small></footer></article>)}</div> : <p className="outfit-usage-status">Cette pièce n’est encore utilisée dans aucune tenue.</p>}
     </section>}
     {error && <p className="field-error full">{error}</p>}
     {!editing._id && <button className="primary full" type="submit" disabled={saving} aria-busy={saving}>
