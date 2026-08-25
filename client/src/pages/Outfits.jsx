@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownWideNarrow, Check, ChevronRight, CirclePlus, Link2, Luggage, Minus, MoreHorizontal, Pencil, Plus, Shirt, Sparkles, Star, Trash2, X } from "lucide-react";
+import { ArrowDownWideNarrow, Check, ChevronDown, ChevronRight, CirclePlus, GripVertical, Link2, ListChecks, Luggage, Minus, MoreHorizontal, Pencil, Plus, RefreshCw, Shirt, Sparkles, Star, Trash2, Upload, X } from "lucide-react";
 import { api } from "../services/api";
 import { fetchItineraryWeather } from "../services/travelWeather";
 import ClothingCard from "../components/ClothingCard";
@@ -18,10 +18,80 @@ const capsuleCategoryCounters = [
   { category: "Inter", label: "Inters", requirement: "inters" },
   { category: "Manteau", label: "Manteaux", requirement: "coats" },
 ];
+const simpleCapsuleTiers = [
+  { key: "upper", label: "Haut du corps", categories: ["Haut", "Inter", "Manteau", "Accessoire"], addCategory: "Haut" },
+  { key: "bottom", label: "Bas", categories: ["Bas"], addCategory: "Bas" },
+  { key: "shoes", label: "Chaussures", categories: ["Chaussures"], addCategory: "Chaussures" },
+];
 const capsuleDraftKey = "wearsense:capsule-draft";
+const defaultTravelChecklist = [
+  ["Hygiène / santé", "Brosse à dents"],
+  ["Hygiène / santé", "Dentifrice"],
+  ["Hygiène / santé", "Lingettes"],
+  ["Hygiène / santé", "Savon"],
+  ["Hygiène / santé", "Serviette"],
+  ["Hygiène / santé", "Papier toilette"],
+  ["Hygiène / santé", "Préservatifs"],
+  ["Hygiène / santé", "Dexeryl"],
+  ["Hygiène / santé", "Cétirizine"],
+  ["Hygiène / santé", "Ventoline"],
+  ["Hygiène / santé", "Prednisolone"],
+  ["Hygiène / santé", "Ordonnances des médicaments"],
+  ["Électronique", "Batterie externe"],
+  ["Électronique", "Chargeur iPhone"],
+  ["Électronique", "Chargeur du casque Bluetooth"],
+  ["Documents / paiement", "Carte bancaire n°1"],
+  ["Documents / paiement", "Carte bancaire n°2"],
+  ["Documents / paiement", "Carte de transport"],
+  ["Documents / paiement", "Carte d’identité"],
+  ["Pratique", "Gourde"]
+].map(([category, label], index) => ({ key: `travel-default-${index + 1}`, category, label, checked: false }));
+const checklistTemplateId = value => String(value?._id || value || "");
+const checklistKey = checklist => String(checklist?._clientKey || checklist?._id || checklistTemplateId(checklist?.templateId) || `name:${checklist?.name || "Checklist"}`);
+const capsuleChecklistInstances = capsule => {
+  // `checklists: []` is an intentional state: the user removed every checklist.
+  // Falling back in that case would immediately recreate the legacy "Voyage" list.
+  if (Array.isArray(capsule?.checklists)) return capsule.checklists.map(item => ({ ...item, items: (item.items || []).map(entry => ({ ...entry })) }));
+  const legacyItems = Array.isArray(capsule?.travelChecklist) && capsule.travelChecklist.length ? capsule.travelChecklist : defaultTravelChecklist;
+  return [{ _clientKey: "legacy-voyage", name: "Voyage", items: legacyItems.map(item => ({ ...item })) }];
+};
 const capsuleOutfitLabel = name => name?.match(/(?:^| · )(Tenue \d+)$/)?.[1] || name;
 const outfitSelectionKey = items => items.map(item => item._id).sort().join(":");
 const outfitSeasons = outfit => Array.isArray(outfit.season) ? outfit.season : outfit.season ? [outfit.season] : [];
+const capsuleSeasonLabels = capsule => {
+  const explicit = Array.isArray(capsule?.season)
+    ? capsule.season.filter(value => seasons.includes(value))
+    : seasons.includes(capsule?.season) ? [capsule.season] : [];
+  if (explicit.length) return explicit;
+  const inferred = seasons.filter(value => (capsule?.clothes || []).some(item => (
+    Array.isArray(item?.season) ? item.season.includes(value) : item?.season === value
+  )));
+  return !inferred.length || inferred.length === seasons.length ? ["Toutes saisons"] : inferred;
+};
+const travelDestinations = capsule => capsule?.travel?.destinations?.length ? capsule.travel.destinations : capsule?.travel?.destination ? [capsule.travel] : [];
+const weatherDaysForDestination = (weather, destination, index) => {
+  const locations = weather?.locations || [];
+  const location = locations.find(item => item.destination === destination.destination) || locations[index];
+  const days = location?.daily?.length ? location.daily : weather?.daily || [];
+  return days.filter(day => (!destination.startDate || day.date >= destination.startDate) && (!destination.endDate || day.date <= destination.endDate));
+};
+const weatherRangeForDestination = (weather, destination, index) => {
+  const days = weatherDaysForDestination(weather, destination, index);
+  const minimums = days.map(day => Number(day.min)).filter(Number.isFinite);
+  const maximums = days.map(day => Number(day.max)).filter(Number.isFinite);
+  if (!minimums.length || !maximums.length) return null;
+  return { min: Math.round(Math.min(...minimums)), max: Math.round(Math.max(...maximums)) };
+};
+const formatTravelDate = value => {
+  if (!value) return "";
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" }).format(date);
+};
+const formatTravelPeriod = destination => {
+  const start = formatTravelDate(destination.startDate);
+  const end = formatTravelDate(destination.endDate);
+  return start && end && start !== end ? `${start} – ${end}` : start || end;
+};
 
 export default function Outfits({ capsulesOnly = false }) {
   const navigate = useNavigate();
@@ -34,9 +104,28 @@ export default function Outfits({ capsulesOnly = false }) {
   const [sortByCompatibility, setSortByCompatibility] = useState(false);
   const [capsules, setCapsules] = useState([]);
   const [openCapsule, setOpenCapsule] = useState(null);
-  const [capsuleDetailTab, setCapsuleDetailTab] = useState("outfits");
+  const [capsuleDetailTab, setCapsuleDetailTab] = useState("packing");
   const [capsulePackingCategory, setCapsulePackingCategory] = useState("");
   const [packedItems, setPackedItems] = useState([]);
+  const [travelChecklist, setTravelChecklist] = useState([]);
+  const [checklistTemplates, setChecklistTemplates] = useState([]);
+  const [capsuleChecklists, setCapsuleChecklists] = useState([]);
+  const [activeChecklistKey, setActiveChecklistKey] = useState("");
+  const [managingCapsuleChecklists, setManagingCapsuleChecklists] = useState(false);
+  const [selectedChecklistTemplateIds, setSelectedChecklistTemplateIds] = useState([]);
+  const [travelChecklistSaving, setTravelChecklistSaving] = useState(false);
+  const [syncingChecklistId, setSyncingChecklistId] = useState("");
+  const [publishingChecklistId, setPublishingChecklistId] = useState("");
+  const [travelChecklistLabel, setTravelChecklistLabel] = useState("");
+  const [travelChecklistCategory, setTravelChecklistCategory] = useState("Pratique");
+  const [newTravelChecklistCategory, setNewTravelChecklistCategory] = useState("");
+  const [quickTravelChecklistCategory, setQuickTravelChecklistCategory] = useState("");
+  const [quickTravelChecklistLabel, setQuickTravelChecklistLabel] = useState("");
+  const [editingTravelChecklistCategory, setEditingTravelChecklistCategory] = useState("");
+  const [editingTravelChecklistCategoryName, setEditingTravelChecklistCategoryName] = useState("");
+  const [draggedTravelChecklistKey, setDraggedTravelChecklistKey] = useState("");
+  const [travelChecklistDropTarget, setTravelChecklistDropTarget] = useState("");
+  const travelChecklistCategoryMenuRef = useRef(null);
   const [replaceTarget, setReplaceTarget] = useState(null);
   const [addTarget, setAddTarget] = useState(null);
   const [addingPackingItem, setAddingPackingItem] = useState(false);
@@ -51,6 +140,9 @@ export default function Outfits({ capsulesOnly = false }) {
   const [reviewCapsule, setReviewCapsule] = useState(null);
   const [draggedPackingItem, setDraggedPackingItem] = useState(null);
   const [dropTargetOutfit, setDropTargetOutfit] = useState(null);
+  const [draggedCapsuleItemId, setDraggedCapsuleItemId] = useState("");
+  const [capsuleItemDropTargetId, setCapsuleItemDropTargetId] = useState("");
+  const [capsuleOrderSaving, setCapsuleOrderSaving] = useState(false);
   const [capsuleActionError, setCapsuleActionError] = useState("");
   const [editingOutfitId, setEditingOutfitId] = useState(null);
   const [editingOutfitName, setEditingOutfitName] = useState("");
@@ -74,11 +166,12 @@ export default function Outfits({ capsulesOnly = false }) {
     if (showLoading) setLoading(true);
     setLoadError("");
     try {
-      const [nextOutfits, nextClothes, nextCollections] = await Promise.all([api("/outfits"), api("/clothes"), api("/collections")]);
+      const [nextOutfits, nextClothes, nextCollections, nextChecklists] = await Promise.all([api("/outfits"), api("/clothes"), api("/collections"), api("/checklists")]);
       if (requestId !== loadRequestRef.current) return;
       setOutfits(nextOutfits);
       setClothes(nextClothes);
       setCapsules(nextCollections.filter(collection => collection.description?.startsWith("Capsule")));
+      setChecklistTemplates(nextChecklists);
     } catch (error) {
       if (requestId !== loadRequestRef.current) return;
       setLoadError(error.message || "Impossible de charger vos données.");
@@ -137,7 +230,12 @@ export default function Outfits({ capsulesOnly = false }) {
   }).sort((a, b) => sortByCompatibility ? (b.compatibleWith?.length || 0) - (a.compatibleWith?.length || 0) : 0);
   const openCapsuleDetail = async capsule => {
     if (capsulesOnly && !capsuleId) { navigate(`/capsules/${capsule._id}`); return; }
-    setPackedItems([]); setCapsuleDetailTab("outfits"); setCapsulePackingCategory(""); setPackingDetailItem(null); setCapsuleRating(capsule.rating || 0); setCapsuleActionError(""); setOpenCapsule(capsule);
+    const checklistInstances = capsuleChecklistInstances(capsule);
+    setPackedItems([]);
+    setCapsuleChecklists(checklistInstances);
+    setActiveChecklistKey(checklistKey(checklistInstances[0]));
+    setTravelChecklist(checklistInstances[0]?.items || []);
+    setCapsuleDetailTab("packing"); setCapsulePackingCategory(""); setPackingDetailItem(null); setCapsuleRating(capsule.rating || 0); setCapsuleActionError(""); setOpenCapsule(capsule);
     const destinations = capsule.travel?.destinations?.length ? capsule.travel.destinations : [capsule.travel];
     if (!destinations.some(destination => destination?.latitude != null && destination?.startDate)) return;
     const today = new Date().toISOString().slice(0, 10);
@@ -147,7 +245,9 @@ export default function Outfits({ capsulesOnly = false }) {
     if (!stale) return;
     try {
       const weather = await fetchItineraryWeather({ destinations });
-      const updated = await api(`/collections/${capsule._id}`, { method: "PUT", body: JSON.stringify({ weather }) });
+      const weatherUpdate = { weather };
+      if (!capsule.weatherSnapshot?.updatedAt && capsule.weather?.updatedAt) weatherUpdate.weatherSnapshot = capsule.weather;
+      const updated = await api(`/collections/${capsule._id}`, { method: "PUT", body: JSON.stringify(weatherUpdate) });
       setOpenCapsule(updated); setCapsules(current => current.map(item => item._id === updated._id ? updated : item));
     } catch {
       // Le rafraîchissement est une tâche de fond : la capsule reste utilisable
@@ -178,6 +278,9 @@ export default function Outfits({ capsulesOnly = false }) {
   const packingDetailCompatibility = packingDetailSource ? capsuleCompatibilityStats(packingDetailSource) : { compatibleItems: [], incompatibleItems: [], eligibleCount: 0 };
   const capsuleCompatibilityItems = packingDetailCompatibility.compatibleItems;
   const capsuleIncompatibilityItems = packingDetailCompatibility.incompatibleItems;
+  const capsuleDestinations = travelDestinations(openCapsule);
+  const isTravelCapsule = openCapsule?.capsuleMode === "travel" || capsuleDestinations.length > 0;
+  const capsuleWeatherReference = openCapsule?.weatherSnapshot?.updatedAt ? openCapsule.weatherSnapshot : openCapsule?.weather;
   const newOutfitCandidates = capsuleClothes.filter(candidate => {
     if (newCapsuleOutfitItems.includes(candidate._id)) return true;
     if (newCapsuleOutfitItems.some(id => capsuleClothes.find(item => item._id === id)?.category === candidate.category)) return false;
@@ -189,6 +292,252 @@ export default function Outfits({ capsulesOnly = false }) {
     if (packingSeason && !candidate.season?.includes(packingSeason)) return false;
     return true;
   }) : [];
+  const checkedTravelItems = travelChecklist.filter(item => item.checked).length;
+  const activeChecklist = capsuleChecklists.find(item => checklistKey(item) === activeChecklistKey) || capsuleChecklists[0];
+  const travelChecklistGroups = travelChecklist.reduce((groups, item) => {
+    const category = item.category || "Autres";
+    if (!groups[category]) groups[category] = [];
+    groups[category].push(item);
+    return groups;
+  }, {});
+  const activeChecklistCategories = [...new Set([
+    ...travelChecklist.map(item => item.category),
+    travelChecklistCategory
+  ].filter(Boolean))];
+  const travelChecklistCategories = activeChecklistCategories.length ? activeChecklistCategories : ["Autres"];
+  const serializeCapsuleChecklists = checklists => checklists.map(checklist => ({
+    _id: checklist._id || undefined,
+    templateId: checklistTemplateId(checklist.templateId) || undefined,
+    name: checklist.name || "Checklist",
+    items: (checklist.items || []).map(item => ({
+      key: item.key,
+      category: item.category,
+      label: item.label,
+      checked: Boolean(item.checked)
+    }))
+  }));
+  const applySavedCapsuleChecklists = (updated, checklistToKeep = activeChecklist) => {
+    const savedChecklists = capsuleChecklistInstances(updated);
+    const savedActive = savedChecklists.find(checklist => String(checklist._id || "") === String(checklistToKeep?._id || ""))
+      || savedChecklists.find(checklist => checklistTemplateId(checklist.templateId) === checklistTemplateId(checklistToKeep?.templateId))
+      || savedChecklists.find(checklist => checklist.name?.toLocaleLowerCase("fr") === checklistToKeep?.name?.toLocaleLowerCase("fr"))
+      || savedChecklists[0];
+    setCapsuleChecklists(savedChecklists);
+    setActiveChecklistKey(checklistKey(savedActive));
+    setTravelChecklist(savedActive?.items || []);
+    setOpenCapsule(updated);
+    setCapsules(current => current.map(capsule => capsule._id === updated._id ? updated : capsule));
+    return { capsule: updated, checklist: savedActive };
+  };
+  const ensureActiveChecklistPersisted = async () => {
+    if (activeChecklist?._id) return { capsule: openCapsule, checklist: activeChecklist };
+    if (!openCapsule || !activeChecklist) throw new Error("Checklist introuvable dans cette capsule.");
+    const updated = await api(`/collections/${openCapsule._id}/checklists`, {
+      method: "PUT",
+      body: JSON.stringify({ checklists: serializeCapsuleChecklists(capsuleChecklists) })
+    });
+    return applySavedCapsuleChecklists(updated, activeChecklist);
+  };
+  const persistTravelChecklist = async nextItems => {
+    if (!openCapsule || travelChecklistSaving) return;
+    const previousItems = travelChecklist;
+    const previousChecklists = capsuleChecklists;
+    const nextChecklists = capsuleChecklists.map(checklist => checklistKey(checklist) === activeChecklistKey ? { ...checklist, items: nextItems } : checklist);
+    setTravelChecklist(nextItems);
+    setCapsuleChecklists(nextChecklists);
+    setTravelChecklistSaving(true);
+    setCapsuleActionError("");
+    try {
+      const updated = await api(`/collections/${openCapsule._id}/checklists`, {
+        method: "PUT",
+        body: JSON.stringify({ checklists: serializeCapsuleChecklists(nextChecklists) })
+      });
+      applySavedCapsuleChecklists(updated, activeChecklist);
+    } catch (error) {
+      setTravelChecklist(previousItems);
+      setCapsuleChecklists(previousChecklists);
+      setCapsuleActionError(error.message || "Impossible d’enregistrer la checklist.");
+    } finally {
+      setTravelChecklistSaving(false);
+    }
+  };
+  const selectCapsuleChecklist = checklist => {
+    setActiveChecklistKey(checklistKey(checklist));
+    setTravelChecklist(checklist.items || []);
+    setCapsuleDetailTab("checklist");
+    setTravelChecklistCategory(checklist.items?.[0]?.category || "Autres");
+  };
+  const openCapsuleChecklistManager = () => {
+    const ids = capsuleChecklists.map(checklist => {
+      const directId = checklistTemplateId(checklist.templateId);
+      if (directId) return directId;
+      return checklistTemplates.find(template => template.name.toLocaleLowerCase("fr") === checklist.name?.toLocaleLowerCase("fr"))?._id;
+    }).filter(Boolean);
+    setSelectedChecklistTemplateIds(ids);
+    setManagingCapsuleChecklists(true);
+  };
+  const saveCapsuleChecklistSelection = async () => {
+    if (!openCapsule || travelChecklistSaving || (isTravelCapsule && !selectedChecklistTemplateIds.length)) return;
+    setTravelChecklistSaving(true);
+    setCapsuleActionError("");
+    try {
+      const checklists = selectedChecklistTemplateIds.map(templateId => checklistTemplates.find(item => item._id === templateId)).filter(Boolean).map(template => {
+        const templateId = template._id;
+        const existing = capsuleChecklists.find(item => checklistTemplateId(item.templateId) === templateId || item.name?.toLocaleLowerCase("fr") === template.name?.toLocaleLowerCase("fr"));
+        const checkedByKey = new Map((existing?.items || []).map(item => [item.key, Boolean(item.checked)]));
+        return {
+          templateId,
+          name: template.name,
+          items: template.items.map(item => ({ ...item, checked: checkedByKey.get(item.key) || false }))
+        };
+      });
+      const updated = await api(`/collections/${openCapsule._id}/checklists`, {
+        method: "PUT",
+        body: JSON.stringify({ checklists })
+      });
+      const savedChecklists = capsuleChecklistInstances(updated);
+      const first = savedChecklists[0];
+      setCapsuleChecklists(savedChecklists);
+      setActiveChecklistKey(first ? checklistKey(first) : "");
+      setTravelChecklist(first?.items || []);
+      setOpenCapsule(updated);
+      setCapsules(current => current.map(capsule => capsule._id === updated._id ? updated : capsule));
+      setManagingCapsuleChecklists(false);
+      if (!savedChecklists.length) setCapsuleDetailTab("packing");
+    } catch (error) {
+      setCapsuleActionError(error.message || "Impossible de modifier les checklists de la capsule.");
+    } finally {
+      setTravelChecklistSaving(false);
+    }
+  };
+  const syncCapsuleChecklist = async () => {
+    if (!openCapsule || !activeChecklist || travelChecklistSaving || syncingChecklistId || publishingChecklistId) return;
+    setSyncingChecklistId(checklistKey(activeChecklist));
+    setCapsuleActionError("");
+    try {
+      const persisted = await ensureActiveChecklistPersisted();
+      const checklistId = String(persisted.checklist._id);
+      const updated = await api(`/collections/${persisted.capsule._id}/checklists/${checklistId}/sync`, { method: "POST" });
+      const savedChecklists = capsuleChecklistInstances(updated);
+      const savedActive = savedChecklists.find(checklist => String(checklist._id) === checklistId)
+        || savedChecklists.find(checklist => checklistTemplateId(checklist.templateId) === checklistTemplateId(persisted.checklist.templateId))
+        || savedChecklists.find(checklist => checklist.name === persisted.checklist.name)
+        || savedChecklists[0];
+      setCapsuleChecklists(savedChecklists);
+      setActiveChecklistKey(checklistKey(savedActive));
+      setTravelChecklist(savedActive?.items || []);
+      setOpenCapsule(updated);
+      setCapsules(current => current.map(capsule => capsule._id === updated._id ? updated : capsule));
+    } catch (error) {
+      setCapsuleActionError(error.message || "Impossible d’actualiser cette checklist.");
+    } finally {
+      setSyncingChecklistId("");
+    }
+  };
+  const publishCapsuleChecklist = async () => {
+    if (!openCapsule || !activeChecklist || travelChecklistSaving || publishingChecklistId || syncingChecklistId) return;
+    setPublishingChecklistId(checklistKey(activeChecklist));
+    setCapsuleActionError("");
+    try {
+      const persisted = await ensureActiveChecklistPersisted();
+      const checklistId = String(persisted.checklist._id);
+      const template = await api(`/collections/${persisted.capsule._id}/checklists/${checklistId}/publish`, { method: "POST" });
+      setChecklistTemplates(current => {
+        const exists = current.some(item => item._id === template._id);
+        return exists
+          ? current.map(item => item._id === template._id ? template : item)
+          : [...current, template];
+      });
+      setCapsuleChecklists(current => current.map(checklist => String(checklist._id) === checklistId
+        ? { ...checklist, templateId: template._id }
+        : checklist));
+    } catch (error) {
+      setCapsuleActionError(error.message || "Impossible de mettre à jour la checklist globale.");
+    } finally {
+      setPublishingChecklistId("");
+    }
+  };
+  const toggleTravelChecklistItem = key => {
+    persistTravelChecklist(travelChecklist.map(item => item.key === key ? { ...item, checked: !item.checked } : item));
+  };
+  const removeTravelChecklistItem = key => {
+    persistTravelChecklist(travelChecklist.filter(item => item.key !== key));
+  };
+  const appendTravelChecklistItem = (rawLabel, rawCategory) => {
+    if (travelChecklistSaving) return;
+    const label = rawLabel.trim();
+    const category = rawCategory.trim();
+    if (!label || !category) return;
+    const key = `travel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    persistTravelChecklist([...travelChecklist, { key, category, label, checked: false }]);
+    return true;
+  };
+  const addTravelChecklistItem = event => {
+    event.preventDefault();
+    if (!appendTravelChecklistItem(travelChecklistLabel, travelChecklistCategory)) return;
+    setTravelChecklistLabel("");
+  };
+  const addQuickTravelChecklistItem = (event, category) => {
+    event.preventDefault();
+    if (!appendTravelChecklistItem(quickTravelChecklistLabel, category)) return;
+    setQuickTravelChecklistLabel("");
+  };
+  const startTravelChecklistCategoryRename = category => {
+    setQuickTravelChecklistCategory("");
+    setQuickTravelChecklistLabel("");
+    setEditingTravelChecklistCategory(category);
+    setEditingTravelChecklistCategoryName(category);
+  };
+  const saveTravelChecklistCategoryRename = (event, category) => {
+    event.preventDefault();
+    const nextCategory = editingTravelChecklistCategoryName.trim();
+    if (nextCategory && nextCategory !== category) {
+      persistTravelChecklist(travelChecklist.map(item => item.category === category ? { ...item, category: nextCategory } : item));
+      if (travelChecklistCategory === category) setTravelChecklistCategory(nextCategory);
+    }
+    setEditingTravelChecklistCategory("");
+    setEditingTravelChecklistCategoryName("");
+  };
+  const selectTravelChecklistCategory = category => {
+    setTravelChecklistCategory(category);
+    travelChecklistCategoryMenuRef.current?.removeAttribute("open");
+  };
+  const createTravelChecklistCategory = () => {
+    const category = newTravelChecklistCategory.trim();
+    if (!category) return;
+    setNewTravelChecklistCategory("");
+    selectTravelChecklistCategory(category);
+  };
+  const moveTravelChecklistItem = (sourceKey, targetCategory, targetKey = "") => {
+    if (!sourceKey || travelChecklistSaving) return;
+    const sourceItem = travelChecklist.find(item => item.key === sourceKey);
+    if (!sourceItem) return;
+    const nextItems = travelChecklist.filter(item => item.key !== sourceKey);
+    const movedItem = { ...sourceItem, category: targetCategory || sourceItem.category };
+    const targetIndex = targetKey ? nextItems.findIndex(item => item.key === targetKey) : -1;
+    if (targetIndex >= 0) {
+      nextItems.splice(targetIndex, 0, movedItem);
+    } else {
+      const lastCategoryIndex = nextItems.reduce((lastIndex, item, index) => item.category === movedItem.category ? index : lastIndex, -1);
+      nextItems.splice(lastCategoryIndex + 1, 0, movedItem);
+    }
+    setDraggedTravelChecklistKey("");
+    setTravelChecklistDropTarget("");
+    persistTravelChecklist(nextItems);
+  };
+  const startTravelChecklistDrag = (event, key) => {
+    if (travelChecklistSaving) {
+      event.preventDefault();
+      return;
+    }
+    setDraggedTravelChecklistKey(key);
+    event.dataTransfer.setData("application/x-travel-checklist-item", key);
+    event.dataTransfer.effectAllowed = "move";
+  };
+  const endTravelChecklistDrag = () => {
+    setDraggedTravelChecklistKey("");
+    setTravelChecklistDropTarget("");
+  };
   const applyCapsuleUpdate = updatedCapsule => {
     const previousOutfitIds = new Set((openCapsule?.outfits || []).map(outfit => outfit._id || outfit));
     const updatedOutfitIds = new Set((updatedCapsule.outfits || []).map(outfit => outfit._id || outfit));
@@ -201,6 +550,75 @@ export default function Outfits({ capsulesOnly = false }) {
     setOpenCapsule(updatedCapsule);
     setCapsules(current => current.map(capsule => capsule._id === updatedCapsule._id ? updatedCapsule : capsule));
     setPackedItems([]);
+  };
+  const clearCapsuleItemDrag = () => {
+    setDraggedCapsuleItemId("");
+    setCapsuleItemDropTargetId("");
+  };
+  const capsuleItemTier = item => simpleCapsuleTiers.find(tier => tier.categories.includes(item.category))?.key;
+  const canReorderCapsuleItem = (sourceId, targetId) => {
+    if (!sourceId || !targetId || String(sourceId) === String(targetId) || !openCapsule) return false;
+    const source = openCapsule.clothes.find(item => String(item._id) === String(sourceId));
+    const target = openCapsule.clothes.find(item => String(item._id) === String(targetId));
+    if (!source || !target) return false;
+    if (isTravelCapsule) return true;
+    return capsuleItemTier(source) && capsuleItemTier(source) === capsuleItemTier(target);
+  };
+  const startCapsuleItemDrag = (event, item) => {
+    if (capsuleOrderSaving || event.target.closest("button, input, label")) {
+      event.preventDefault();
+      return;
+    }
+    const itemId = String(item._id);
+    setDraggedCapsuleItemId(itemId);
+    event.dataTransfer.setData("application/x-capsule-item", itemId);
+    event.dataTransfer.effectAllowed = "move";
+  };
+  const dragOverCapsuleItem = (event, targetId) => {
+    const sourceId = event.dataTransfer.getData("application/x-capsule-item") || draggedCapsuleItemId;
+    if (!canReorderCapsuleItem(sourceId, targetId)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setCapsuleItemDropTargetId(String(targetId));
+  };
+  const reorderCapsuleItems = async (event, targetId) => {
+    event.preventDefault();
+    const sourceId = event.dataTransfer.getData("application/x-capsule-item") || draggedCapsuleItemId;
+    if (!canReorderCapsuleItem(sourceId, targetId)) {
+      clearCapsuleItemDrag();
+      return;
+    }
+    const previousCapsule = openCapsule;
+    const orderedClothes = [...previousCapsule.clothes];
+    const sourceIndex = orderedClothes.findIndex(item => String(item._id) === String(sourceId));
+    const targetIndex = orderedClothes.findIndex(item => String(item._id) === String(targetId));
+    if (sourceIndex < 0 || targetIndex < 0) {
+      clearCapsuleItemDrag();
+      return;
+    }
+    const [movedItem] = orderedClothes.splice(sourceIndex, 1);
+    orderedClothes.splice(targetIndex, 0, movedItem);
+    const optimisticCapsule = { ...previousCapsule, clothes: orderedClothes };
+    setOpenCapsule(optimisticCapsule);
+    setCapsules(current => current.map(capsule => capsule._id === optimisticCapsule._id ? optimisticCapsule : capsule));
+    setCapsuleOrderSaving(true);
+    setCapsuleActionError("");
+    clearCapsuleItemDrag();
+    try {
+      const updatedCapsule = await api(`/collections/${previousCapsule._id}/items/order`, {
+        method: "PUT",
+        body: JSON.stringify({ clothes: orderedClothes.map(item => item._id) })
+      });
+      setOpenCapsule(updatedCapsule);
+      setCapsules(current => current.map(capsule => capsule._id === updatedCapsule._id ? updatedCapsule : capsule));
+    } catch (error) {
+      setOpenCapsule(previousCapsule);
+      setCapsules(current => current.map(capsule => capsule._id === previousCapsule._id ? previousCapsule : capsule));
+      setCapsuleActionError(error.message || "Impossible d’enregistrer l’ordre des pièces.");
+    } finally {
+      setCapsuleOrderSaving(false);
+      clearCapsuleItemDrag();
+    }
   };
   const adjustCapsuleTarget = async delta => {
     const targetPieces = Math.min(100, Math.max(1, (openCapsule.targetPieces || 15) + delta));
@@ -234,7 +652,7 @@ export default function Outfits({ capsulesOnly = false }) {
         body: JSON.stringify({ outfits: generatedOutfitReview.accepted.map(items => ({ clothes: items.map(item => item._id) })) })
       });
       applyCapsuleUpdate(updated);
-      setCapsuleDetailTab("outfits");
+      setCapsuleDetailTab("packing");
       setGeneratedOutfitReview(null);
     } catch (error) {
       setGeneratedOutfitReview(current => ({ ...current, error: error.message }));
@@ -308,7 +726,7 @@ export default function Outfits({ capsulesOnly = false }) {
       : capsule.travel?.destination
         ? [capsule.travel]
         : [];
-    const firstSeason = capsule.outfits.flatMap(outfitSeasons)[0] || "";
+    const firstSeason = capsule.season || capsule.outfits.flatMap(outfitSeasons)[0] || "";
     localStorage.setItem(capsuleDraftKey, JSON.stringify({
       version: 1,
       editingCapsuleId: capsule._id,
@@ -465,9 +883,9 @@ export default function Outfits({ capsulesOnly = false }) {
         </div>
         <div className="outfit-card-footer capsule-card-footer">
           <div className="outfit-card-name">{editingCapsuleId === capsule._id ? <input value={editingCapsuleName} autoFocus aria-label="Nom de la capsule" onClick={event => event.stopPropagation()} onChange={event => setEditingCapsuleName(event.target.value)} onBlur={() => saveInlineCapsuleName(capsule)} onKeyDown={event => { event.stopPropagation(); if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") setEditingCapsuleId(null); }}/> : <h3>{capsule.name}</h3>}</div>
+          <div className="capsule-card-seasons" aria-label="Saisons de la capsule">{capsuleSeasonLabels(capsule).map(value => <span key={value}>{value}</span>)}</div>
           <div className="capsule-card-details">
             <button type="button" className={capsule.rating ? "rated" : ""} aria-label="Noter la capsule" title="Note" onClick={event => { event.stopPropagation(); openCapsuleReview(capsule); }}><Star size={16} fill={capsule.rating ? "currentColor" : "none"}/>{capsule.rating || "–"}</button>
-            <span><Luggage size={16}/>{capsule.outfits.length} tenue{capsule.outfits.length > 1 ? "s" : ""}</span>
             <span><Shirt size={16}/>{capsule.clothes.length} pièce{capsule.clothes.length > 1 ? "s" : ""}</span>
             <ChevronRight className="capsule-card-chevron" size={21}/>
           </div>
@@ -476,9 +894,8 @@ export default function Outfits({ capsulesOnly = false }) {
       {!capsulesOnly && outfits.map(outfit => <article className="outfit-card reviewable" key={outfit._id} role="button" tabIndex="0" onClick={() => openOutfitReview(outfit)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") openOutfitReview(outfit); }}><div className="outfit-collage">{outfit.clothes.slice(0, 4).map(item => <div key={item._id}>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span>{item.category}</span>}</div>)}</div><div className="outfit-card-footer"><div className="outfit-card-name">{editingOutfitId === outfit._id ? <input value={editingOutfitName} autoFocus aria-label="Nom de l’outfit" onClick={event => event.stopPropagation()} onChange={event => setEditingOutfitName(event.target.value)} onBlur={() => saveInlineOutfitName(outfit)} onKeyDown={event => { event.stopPropagation(); if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") setEditingOutfitId(null); }}/> : <><h3>{outfit.name}</h3><button type="button" aria-label={`Renommer ${outfit.name}`} title="Renommer" onClick={event => { event.stopPropagation(); startOutfitNameEdit(outfit); }}><Pencil size={15}/></button></>}</div><div className="outfit-card-meta"><span className={outfit.rating ? "rated" : ""} title="Note"><Star size={16} fill={outfit.rating ? "currentColor" : "none"}/>{outfit.rating || "–"}</span><span title={`${outfit.clothes.length} pièces`}><Shirt size={16}/>{outfit.clothes.length}</span><button type="button" className="outfit-card-delete" aria-label={`Supprimer ${outfit.name}`} title="Supprimer" onClick={event => { event.stopPropagation(); remove(outfit); }}><Trash2 size={16}/></button></div></div></article>)}
     </div>}
     {openCapsule && <Modal title={editingCapsuleId === openCapsule._id ? <input className="inline-capsule-name" value={editingCapsuleName} autoFocus aria-label="Nom de la capsule" onChange={event => setEditingCapsuleName(event.target.value)} onBlur={() => saveInlineCapsuleName(openCapsule)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") { setEditingCapsuleName(openCapsule.name); setEditingCapsuleId(null); } }}/> : <button type="button" className="editable-capsule-name" title="Cliquer pour renommer" onClick={() => startCapsuleNameEdit(openCapsule)}>{openCapsule.name}<Pencil size={17}/></button>} onClose={() => { setPackingDetailItem(null); setOpenCapsule(null); }}>
-      <div className="capsule-detail capsule-detail-tabbed">
+      <div className={`capsule-detail capsule-detail-tabbed ${!isTravelCapsule ? "simple-capsule-detail" : ""}`}>
         <div className="capsule-detail-summary">
-          <div><strong>{openCapsule.outfits.length}</strong><span>Tenues</span></div>
           <div><strong>{openCapsule.clothes.length}</strong><span>Pièces</span></div>
           {openCapsule.capsuleMode === "simple" && <div className="capsule-target-editor"><span>Objectif</span><button type="button" aria-label="Réduire l’objectif de pièces" onClick={() => adjustCapsuleTarget(-1)}><Minus size={14}/></button><strong>{openCapsule.targetPieces || 15}</strong><button type="button" aria-label="Augmenter l’objectif de pièces" onClick={() => adjustCapsuleTarget(1)}><Plus size={14}/></button></div>}
           <div className="capsule-category-summary" aria-label="Répartition des pièces par catégorie">
@@ -492,22 +909,111 @@ export default function Outfits({ capsulesOnly = false }) {
               }}><b>{current}{Number.isFinite(target) ? `/${target}` : ""}</b> {counter.label}</button>;
             })}
           </div>
-          <div className="capsule-detail-actions"><button type="button" className="capsule-edit-button" onClick={() => editCapsule(openCapsule)}><Pencil size={16}/> Modifier la capsule</button><button type="button" onClick={startGeneratedOutfitReview}><Sparkles size={16}/> Générer les tenues</button><button type="button" onClick={() => { setNewCapsuleOutfitItems([]); setCreatingCapsuleOutfit(true); }}><CirclePlus size={16}/> Ajouter une tenue</button></div>
+          <div className="capsule-detail-actions"><button type="button" className="capsule-edit-button" onClick={() => editCapsule(openCapsule)}><Pencil size={16}/> Modifier la capsule</button></div>
         </div>
+        {openCapsule.capsuleMode === "travel" && capsuleDestinations.length > 0 && <section className="capsule-travel-history" aria-label="Météo du voyage">
+          {capsuleDestinations.map((destination, index) => {
+            const reference = weatherRangeForDestination(capsuleWeatherReference, destination, index);
+            const current = weatherRangeForDestination(openCapsule.weather, destination, index);
+            const changed = reference && current && (Math.abs(current.min - reference.min) > 2 || Math.abs(current.max - reference.max) > 2);
+            return <article key={`${destination.destination}-${destination.startDate}-${index}`} className={changed ? "changed" : ""}>
+              <div><strong>{destination.destination}</strong><span>{formatTravelPeriod(destination)}</span></div>
+              <div className="capsule-temperature-comparison">
+                <span><small>Référence</small><b>{reference ? `${reference.min}°–${reference.max}°` : "Indisponible"}</b></span>
+                <ChevronRight size={16}/>
+                <span><small>Actuellement</small><b>{current ? `${current.min}°–${current.max}°` : "Indisponible"}</b></span>
+              </div>
+              <em>{changed ? "Températures à vérifier" : current ? "Températures cohérentes" : "En attente d’actualisation"}</em>
+            </article>;
+          })}
+          <p>Référence enregistrée lors de la création · dernière actualisation {openCapsule.weather?.updatedAt ? new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(new Date(openCapsule.weather.updatedAt)) : "indisponible"}</p>
+        </section>}
         {capsuleActionError && <p className="capsule-action-error">{capsuleActionError}</p>}
-        <nav className="capsule-detail-tabs" aria-label="Contenu de la capsule">
-          <button type="button" className={capsuleDetailTab === "outfits" ? "active" : ""} aria-pressed={capsuleDetailTab === "outfits"} onClick={() => setCapsuleDetailTab("outfits")}>Tenues <span>{openCapsule.outfits.length}</span></button>
-          <button type="button" className={capsuleDetailTab === "packing" ? "active" : ""} aria-pressed={capsuleDetailTab === "packing"} onClick={() => { setCapsuleDetailTab("packing"); setCapsulePackingCategory(""); }}>Bagages <span>{openCapsule.clothes.length}</span></button>
+        <nav className="capsule-baggage-tabs" aria-label="Contenu des bagages">
+          <button type="button" className={capsuleDetailTab === "packing" ? "active" : ""} aria-pressed={capsuleDetailTab === "packing"} onClick={() => setCapsuleDetailTab("packing")}>
+            <Shirt size={17}/> Vêtements <span>{packedItems.length}/{openCapsule.clothes.length}</span>
+          </button>
+          {capsuleChecklists.map(checklist => {
+            const checked = (checklist.items || []).filter(item => item.checked).length;
+            const active = capsuleDetailTab === "checklist" && checklistKey(checklist) === activeChecklistKey;
+            return <button type="button" key={checklistKey(checklist)} className={active ? "active" : ""} aria-pressed={active} onClick={() => selectCapsuleChecklist(checklist)}>
+              <Check size={17}/> {checklist.name} <span>{checked}/{checklist.items?.length || 0}</span>
+            </button>;
+          })}
+          <button type="button" className="manage-checklists" onClick={openCapsuleChecklistManager}><Plus size={17}/> Checklists</button>
         </nav>
         <div className="capsule-detail-content">
-          {capsuleDetailTab === "packing" ? <section className="packing-list packing-list-tab">
+          {capsuleDetailTab === "packing" ? !isTravelCapsule ? <section className="simple-capsule-composition">
+            <header className="simple-capsule-composition-header">
+              <div>
+                <h3>Composition</h3>
+                <p>{openCapsule.clothes.length} pièce{openCapsule.clothes.length > 1 ? "s" : ""}, organisées comme une silhouette.</p>
+              </div>
+              <button type="button" onClick={() => openPackingSelector()}><CirclePlus size={17}/> Ajouter une pièce</button>
+            </header>
+            <div className="simple-capsule-tiers">
+              {simpleCapsuleTiers
+                .filter(tier => !capsulePackingCategory || tier.categories.includes(capsulePackingCategory))
+                .map((tier, tierIndex) => {
+                  const tierItems = openCapsule.clothes
+                    .filter(item => tier.categories.includes(item.category));
+                  return <section className={`simple-capsule-tier simple-capsule-tier-${tier.key}`} key={tier.key}>
+                    <header>
+                      <span>{String(tierIndex + 1).padStart(2, "0")}</span>
+                      <div><h4>{tier.label}</h4><small>{tierItems.length} pièce{tierItems.length > 1 ? "s" : ""}</small></div>
+                    </header>
+                    <div className="simple-capsule-tier-track">
+                      {tierItems.map(item => {
+                        const compatibility = capsuleCompatibilityStats(item);
+                        const compatibilityCount = compatibility.compatibleItems.length;
+                        const itemId = String(item._id);
+                        return <article
+                          className={`simple-capsule-piece ${draggedCapsuleItemId === itemId ? "capsule-item-dragging" : ""} ${capsuleItemDropTargetId === itemId ? "capsule-item-drop-target" : ""}`}
+                          key={item._id}
+                          draggable={!capsuleOrderSaving}
+                          aria-grabbed={draggedCapsuleItemId === itemId}
+                          onDragStart={event => startCapsuleItemDrag(event, item)}
+                          onDragOver={event => dragOverCapsuleItem(event, item._id)}
+                          onDrop={event => reorderCapsuleItems(event, item._id)}
+                          onDragEnd={clearCapsuleItemDrag}
+                        >
+                          <span className="capsule-item-drag-handle" title="Déplacer la pièce" aria-hidden="true"><GripVertical size={18}/></span>
+                          <button type="button" className="simple-capsule-piece-open" onClick={() => setPackingDetailItem(item)} aria-label={`Voir les détails de ${item.name || item.category}`}>
+                            {item.imageUrl ? <img src={item.imageUrl} alt=""/> : <i/>}
+                            <span className="simple-capsule-piece-category">{item.category}</span>
+                            <strong className="simple-capsule-piece-score" title={`${compatibilityCount} compatibilité${compatibilityCount > 1 ? "s" : ""} sur ${compatibility.eligibleCount} pièce${compatibility.eligibleCount > 1 ? "s" : ""} associable${compatibility.eligibleCount > 1 ? "s" : ""}`}>
+                              <Link2 size={13}/>{compatibilityCount}/{compatibility.eligibleCount}
+                            </strong>
+                          </button>
+                          <button type="button" className="simple-capsule-piece-remove" aria-label={`Retirer ${item.name || item.category} de la capsule`} onClick={() => removeItemFromCapsule(item)}><Trash2 size={14}/></button>
+                        </article>;
+                      })}
+                      <button type="button" className="simple-capsule-tier-add" onClick={() => openPackingSelector(tier.addCategory)} aria-label={`Ajouter une pièce : ${tier.label}`}>
+                        <Plus size={24}/><span>Ajouter</span>
+                      </button>
+                    </div>
+                  </section>;
+                })}
+            </div>
+          </section> : <section className="packing-list packing-list-tab">
             <header><div><h3>Liste bagages</h3><p>Cochez les pièces déjà placées dans la valise.</p></div><div className="packing-list-controls"><strong>{packedItems.length}/{openCapsule.clothes.length}</strong><button type="button" onClick={() => openPackingSelector()}><CirclePlus size={15}/> Ajouter une pièce</button></div></header>
             <div>
               {openCapsule.clothes.filter(item => !capsulePackingCategory || item.category === capsulePackingCategory).map(item => {
                 const compatibility = capsuleCompatibilityStats(item);
                 const compatibilityCount = compatibility.compatibleItems.length;
-                return <div key={item._id} className={`packing-list-row ${packedItems.includes(item._id) ? "packed" : ""}`}>
+                const itemId = String(item._id);
+                return <div
+                  key={item._id}
+                  className={`packing-list-row ${packedItems.includes(item._id) ? "packed" : ""} ${draggedCapsuleItemId === itemId ? "capsule-item-dragging" : ""} ${capsuleItemDropTargetId === itemId ? "capsule-item-drop-target" : ""}`}
+                  draggable={!capsuleOrderSaving}
+                  aria-grabbed={draggedCapsuleItemId === itemId}
+                  onDragStart={event => startCapsuleItemDrag(event, item)}
+                  onDragOver={event => dragOverCapsuleItem(event, item._id)}
+                  onDrop={event => reorderCapsuleItems(event, item._id)}
+                  onDragEnd={clearCapsuleItemDrag}
+                >
                   <label className="packing-check"><input type="checkbox" checked={packedItems.includes(item._id)} onChange={() => setPackedItems(current => current.includes(item._id) ? current.filter(id => id !== item._id) : [...current, item._id])}/><span>Marquer comme placé dans la valise</span></label>
+                  <span className="capsule-item-drag-handle" title="Déplacer la pièce" aria-hidden="true"><GripVertical size={18}/></span>
                   <button type="button" className="packing-item-open" onClick={() => setPackingDetailItem(item)} aria-label={`Voir les détails de ${item.name || item.category}`}>
                     {item.imageUrl ? <img src={item.imageUrl} alt=""/> : <i/>}
                     <span><b>{item.name || item.category}</b><small>{item.category}</small></span>
@@ -521,6 +1027,152 @@ export default function Outfits({ capsulesOnly = false }) {
                 <b>{capsulePackingCategory === "Chaussures" ? "Ajouter des chaussures" : `Ajouter un ${capsulePackingCategory.toLowerCase()}`}</b>
               </button>}
             </div>
+          </section> : capsuleDetailTab === "checklist" ? <section className="travel-checklist-panel">
+            <header>
+              <div><h3>Checklist {activeChecklist?.name || ""}</h3><p>Ajoutez puis cochez les objets placés dans vos bagages.</p></div>
+              <div className="travel-checklist-header-actions">
+                {activeChecklist && <button type="button" onClick={syncCapsuleChecklist} disabled={travelChecklistSaving || Boolean(syncingChecklistId) || Boolean(publishingChecklistId)}>
+                  <RefreshCw size={16} className={syncingChecklistId ? "spinning" : ""}/>
+                  {syncingChecklistId ? "Récupération…" : "Récupérer les nouveautés"}
+                </button>}
+                {activeChecklist && <button type="button" onClick={publishCapsuleChecklist} disabled={travelChecklistSaving || Boolean(publishingChecklistId) || Boolean(syncingChecklistId)}>
+                  <Upload size={16}/>
+                  {publishingChecklistId ? "Mise à jour…" : "Mettre à jour la globale"}
+                </button>}
+                <strong>{checkedTravelItems}/{travelChecklist.length}</strong>
+              </div>
+            </header>
+            <form className="travel-checklist-add" onSubmit={addTravelChecklistItem}>
+              <input name="label" required maxLength="140" placeholder="Ajouter un élément…" value={travelChecklistLabel} onChange={event => setTravelChecklistLabel(event.target.value)}/>
+              <details className="travel-checklist-category-picker" ref={travelChecklistCategoryMenuRef}>
+                <summary aria-label={`Catégorie : ${travelChecklistCategory}`}>
+                  <span><small>Catégorie</small>{travelChecklistCategory}</span>
+                  <ChevronDown size={17}/>
+                </summary>
+                <div className="travel-checklist-category-menu">
+                  <strong>Choisir une catégorie</strong>
+                  <div className="travel-checklist-category-options">
+                    {travelChecklistCategories.map(category => <button type="button" key={category} className={travelChecklistCategory === category ? "active" : ""} onClick={() => selectTravelChecklistCategory(category)}>{category}</button>)}
+                  </div>
+                  <div className="travel-checklist-new-category">
+                    <input
+                      type="text"
+                      maxLength="80"
+                      placeholder="Nouvelle catégorie"
+                      aria-label="Nom de la nouvelle catégorie"
+                      value={newTravelChecklistCategory}
+                      onChange={event => setNewTravelChecklistCategory(event.target.value)}
+                      onKeyDown={event => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          createTravelChecklistCategory();
+                        }
+                      }}
+                    />
+                    <button type="button" disabled={!newTravelChecklistCategory.trim()} onClick={createTravelChecklistCategory} aria-label="Créer la catégorie"><Plus size={17}/></button>
+                  </div>
+                </div>
+              </details>
+              <button className="travel-checklist-submit" type="submit" disabled={travelChecklistSaving || !travelChecklistLabel.trim()}><Plus size={17}/> Ajouter</button>
+            </form>
+            <div className="travel-checklist-groups">
+              {Object.entries(travelChecklistGroups).map(([category, items]) => <section
+                key={category}
+                className={`travel-checklist-group ${travelChecklistDropTarget === `category:${category}` ? "drop-target" : ""}`}
+                onDragOver={event => {
+                  if (!draggedTravelChecklistKey) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setTravelChecklistDropTarget(`category:${category}`);
+                }}
+                onDragLeave={event => {
+                  if (!event.currentTarget.contains(event.relatedTarget) && travelChecklistDropTarget === `category:${category}`) setTravelChecklistDropTarget("");
+                }}
+                onDrop={event => {
+                  event.preventDefault();
+                  moveTravelChecklistItem(event.dataTransfer.getData("application/x-travel-checklist-item") || draggedTravelChecklistKey, category);
+                }}
+              >
+                <header>
+                  {editingTravelChecklistCategory === category ? <form className="checklist-category-rename" onSubmit={event => saveTravelChecklistCategoryRename(event, category)}>
+                    <input
+                      autoFocus
+                      value={editingTravelChecklistCategoryName}
+                      onChange={event => setEditingTravelChecklistCategoryName(event.target.value)}
+                      onKeyDown={event => {
+                        if (event.key === "Escape") {
+                          setEditingTravelChecklistCategory("");
+                          setEditingTravelChecklistCategoryName("");
+                        }
+                      }}
+                      aria-label={`Renommer la catégorie ${category}`}
+                    />
+                    <button type="submit" aria-label="Valider le nouveau nom"><Check size={16}/></button>
+                    <button type="button" onClick={() => {
+                      setEditingTravelChecklistCategory("");
+                      setEditingTravelChecklistCategoryName("");
+                    }} aria-label="Annuler le renommage"><X size={16}/></button>
+                  </form> : <button type="button" className="checklist-category-title" onClick={() => startTravelChecklistCategoryRename(category)} title="Renommer la catégorie">
+                    <h4>{category}</h4><Pencil size={14}/>
+                  </button>}
+                  <span className="checklist-category-actions">
+                    <span>{items.filter(item => item.checked).length}/{items.length}</span>
+                    <button type="button" className="checklist-category-icon-button" onClick={() => {
+                      setEditingTravelChecklistCategory("");
+                      setEditingTravelChecklistCategoryName("");
+                      setQuickTravelChecklistCategory(current => current === category ? "" : category);
+                      setQuickTravelChecklistLabel("");
+                    }} aria-label={`Ajouter un élément dans ${category}`} title={`Ajouter dans ${category}`}><Plus size={17}/></button>
+                  </span>
+                </header>
+                {quickTravelChecklistCategory === category && <form className="checklist-category-quick-add" onSubmit={event => addQuickTravelChecklistItem(event, category)}>
+                  <input
+                    autoFocus
+                    value={quickTravelChecklistLabel}
+                    onChange={event => setQuickTravelChecklistLabel(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === "Escape") {
+                        setQuickTravelChecklistCategory("");
+                        setQuickTravelChecklistLabel("");
+                      }
+                    }}
+                    placeholder={`Ajouter dans ${category}`}
+                    aria-label={`Nouvel élément dans ${category}`}
+                  />
+                  <button type="submit" disabled={!quickTravelChecklistLabel.trim()}><Plus size={16}/> Ajouter</button>
+                  <button type="button" className="is-icon-only" onClick={() => {
+                    setQuickTravelChecklistCategory("");
+                    setQuickTravelChecklistLabel("");
+                  }} aria-label="Fermer"><X size={16}/></button>
+                </form>}
+                <div>{items.map(item => <div
+                  key={item.key}
+                  draggable={!travelChecklistSaving}
+                  className={`travel-checklist-row ${item.checked ? "checked" : ""} ${draggedTravelChecklistKey === item.key ? "dragging" : ""} ${travelChecklistDropTarget === `item:${item.key}` ? "drop-target" : ""}`}
+                  title="Glisser pour déplacer"
+                  onDragStart={event => startTravelChecklistDrag(event, item.key)}
+                  onDragEnd={endTravelChecklistDrag}
+                  onDragOver={event => {
+                    if (!draggedTravelChecklistKey || draggedTravelChecklistKey === item.key) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.dataTransfer.dropEffect = "move";
+                    setTravelChecklistDropTarget(`item:${item.key}`);
+                  }}
+                  onDrop={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    moveTravelChecklistItem(event.dataTransfer.getData("application/x-travel-checklist-item") || draggedTravelChecklistKey, category, item.key);
+                  }}
+                >
+                  <GripVertical className="travel-checklist-drag-handle" size={16} aria-hidden="true"/>
+                  <label><input type="checkbox" checked={item.checked} disabled={travelChecklistSaving} onChange={() => toggleTravelChecklistItem(item.key)}/><span>{item.label}</span></label>
+                  <button type="button" disabled={travelChecklistSaving} aria-label={`Supprimer ${item.label}`} onClick={() => removeTravelChecklistItem(item.key)}><Trash2 size={15}/></button>
+                </div>)}</div>
+              </section>)}
+              {!travelChecklist.length && <p className="travel-checklist-empty">Cette checklist ne contient encore aucun élément.</p>}
+            </div>
+            {travelChecklistSaving && <span className="travel-checklist-saving">Enregistrement…</span>}
           </section> : <div ref={capsuleOutfitScrollerRef} className="capsule-outfits-list capsule-outfits-rows" tabIndex={openCapsule.outfits.length ? 0 : -1} aria-label="Tenues de la capsule. Utilisez les flèches gauche et droite pour les faire défiler.">
             {openCapsule.outfits.map(outfit => <article key={outfit._id} className={dropTargetOutfit === outfit._id ? "drop-active" : ""} onDragOver={event => { if (!draggedOutfitItem) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setDropTargetOutfit(outfit._id); } }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDropTargetOutfit(null); }} onDrop={event => { if (!draggedOutfitItem) dropPackingItem(event, outfit._id); }}>
               <header className="capsule-outfit-row-header">
@@ -534,6 +1186,28 @@ export default function Outfits({ capsulesOnly = false }) {
           </div>}
         </div>
       </div>
+    </Modal>}
+    {managingCapsuleChecklists && <Modal title="Checklists de la capsule" onClose={() => setManagingCapsuleChecklists(false)}>
+      <section className="capsule-checklist-manager">
+        <p>Choisissez les checklists à utiliser dans cette capsule. Chaque liste conservera ici son propre état.</p>
+        <div className="capsule-checklist-picker">
+          {checklistTemplates.map(template => <label key={template._id} className={selectedChecklistTemplateIds.includes(template._id) ? "selected" : ""}>
+            <input
+              type="checkbox"
+              checked={selectedChecklistTemplateIds.includes(template._id)}
+              onChange={() => setSelectedChecklistTemplateIds(current => current.includes(template._id) ? current.filter(id => id !== template._id) : [...current, template._id])}
+            />
+            <ListChecks size={20}/>
+            <span><strong>{template.name}</strong><small>{template.items.length} élément{template.items.length > 1 ? "s" : ""}</small></span>
+          </label>)}
+        </div>
+        {!checklistTemplates.length && <p className="empty-filter-message">Aucune checklist globale n’est disponible.</p>}
+        <footer>
+          <button type="button" className="secondary" onClick={() => { setManagingCapsuleChecklists(false); navigate("/checklists"); }}>Gérer les modèles</button>
+          <button type="button" className="primary" disabled={travelChecklistSaving || (isTravelCapsule && !selectedChecklistTemplateIds.length)} onClick={saveCapsuleChecklistSelection}>{travelChecklistSaving ? "Enregistrement…" : "Appliquer"}</button>
+        </footer>
+        {isTravelCapsule && !selectedChecklistTemplateIds.length && <small className="capsule-checklist-hint">Sélectionnez au moins une checklist.</small>}
+      </section>
     </Modal>}
     {replaceTarget && <Modal title={`Remplacer ${replaceTarget.item.name || replaceTarget.item.category}`} onClose={() => setReplaceTarget(null)}><p>Choisissez une pièce compatible de la catégorie {replaceTarget.item.category}.</p><div className="selector-grid replacement-grid">{replacementCandidates.map(item => <ClothingCard key={item._id} item={item} selectable onSelect={replaceCapsuleItem}/>)}</div>{!replacementCandidates.length && <p className="empty-filter-message">Aucune autre pièce compatible disponible.</p>}</Modal>}
     {addTarget && <Modal title="Ajouter une pièce à la tenue" onClose={() => setAddTarget(null)}><p>Choisissez une pièce compatible dans une catégorie absente de cette tenue.</p><div className="selector-grid replacement-grid">{additionCandidates.map(item => <ClothingCard key={item._id} item={item} selectable onSelect={addCapsuleItem}/>)}</div>{!additionCandidates.length && <p className="empty-filter-message">Aucune pièce compatible à ajouter.</p>}</Modal>}

@@ -1,8 +1,11 @@
 import express from "express";
 import Collection from "../models/Collection.js";
 import Clothing from "../models/Clothing.js";
+import ChecklistTemplate from "../models/ChecklistTemplate.js";
 import Outfit from "../models/Outfit.js";
 const router = express.Router();
+const capsuleSeasons = ["Printemps", "Été", "Automne", "Hiver"];
+const normalizedCapsuleSeason = value => capsuleSeasons.includes(value) ? value : "";
 router.get("/", async (req, res) => res.json(await Collection.find().populate("clothes").populate({ path: "outfits", populate: { path: "clothes" } }).sort({ createdAt: -1 })));
 router.post("/", async (req, res) => {
   const clothes = req.body.clothes || [], outfits = req.body.outfits || [];
@@ -28,32 +31,22 @@ router.post("/capsule", async (req, res) => {
   combinations = combinations.filter(combination => combination.every((item, index) => combination.slice(index + 1).every(other => item.compatibleWith.map(String).includes(String(other._id)))));
   if (combinations.length < outfitCount) return res.status(400).json({ message: `Seulement ${combinations.length} tenue${combinations.length > 1 ? "s" : ""} compatible${combinations.length > 1 ? "s" : ""} possible${combinations.length > 1 ? "s" : ""}` });
   const createdOutfits = await Outfit.insertMany(combinations.slice(0, outfitCount).map((combination, index) => ({ name: `${req.body.name} · Tenue ${index + 1}`, clothes: combination.map(item => item._id), occasion: "Voyage" })));
-  const collection = await Collection.create({ name: req.body.name, description: "Capsule bagage", clothes: clothes.map(item => item._id), outfits: createdOutfits.map(outfit => outfit._id) });
+  const collection = await Collection.create({ name: req.body.name, season: normalizedCapsuleSeason(req.body.season), description: "Capsule bagage", clothes: clothes.map(item => item._id), outfits: createdOutfits.map(outfit => outfit._id) });
   res.status(201).json(await collection.populate(["clothes", "outfits"]));
 });
 router.post("/capsule/generated", async (req, res) => {
   const name = req.body.name?.trim();
   const capsuleMode = req.body.capsuleMode === "simple" ? "simple" : "travel";
-  const proposedOutfits = Array.isArray(req.body.outfits) ? req.body.outfits.slice(0, 20) : [];
-  const simpleClothes = Array.isArray(req.body.clothes) ? req.body.clothes : [];
-  if (!name || (capsuleMode === "travel" && !proposedOutfits.length) || (capsuleMode === "simple" && !simpleClothes.length)) return res.status(400).json({ message: "Capsule invalide" });
-  const ids = [...new Set(capsuleMode === "simple" ? simpleClothes : proposedOutfits.flatMap(outfit => outfit.clothes || []))];
+  const requestedClothes = Array.isArray(req.body.clothes) ? req.body.clothes : [];
+  if (!name || !requestedClothes.length) return res.status(400).json({ message: "Capsule invalide" });
+  const ids = [...new Set(requestedClothes)];
   const clothes = await Clothing.find({ _id: { $in: ids } });
   if (clothes.length !== ids.length) return res.status(400).json({ message: "Certaines pièces sont introuvables" });
   if (capsuleMode === "simple") {
     const missingCategories = ["Haut", "Bas", "Chaussures"].filter(category => !clothes.some(item => item.category === category));
     if (missingCategories.length) return res.status(400).json({ message: `Une capsule doit contenir au minimum un haut, un bas et une paire de chaussures. Il manque : ${missingCategories.join(" · ")}` });
   }
-  const byId = new Map(clothes.map(item => [String(item._id), item]));
-  for (const proposal of proposedOutfits) {
-    const items = (proposal.clothes || []).map(id => byId.get(String(id))).filter(Boolean);
-    if (!items.length || new Set(items.map(item => item.category)).size !== items.length) return res.status(400).json({ message: "Une tenue générée est invalide" });
-    const compatible = items.every((item, index) => items.slice(index + 1).every(other => item.compatibleWith.map(String).includes(String(other._id)) || other.compatibleWith.map(String).includes(String(item._id))));
-    if (!compatible) return res.status(400).json({ message: "Une tenue contient des pièces incompatibles" });
-  }
-  const capsuleSeasons = Array.isArray(req.body.season) ? req.body.season : req.body.season ? [req.body.season] : [];
-  const created = capsuleMode === "simple" ? [] : await Outfit.insertMany(proposedOutfits.map((proposal, index) => ({ name: proposal.name?.trim() || `${name} · Tenue ${index + 1}`, clothes: proposal.clothes, occasion: "Voyage", season: capsuleSeasons })));
-  const collection = await Collection.create({ name, capsuleMode, targetPieces: capsuleMode === "simple" ? Math.min(100, Math.max(1, Number(req.body.targetPieces) || 15)) : undefined, description: capsuleMode === "simple" ? "Capsule" : "Capsule bagage", clothes: ids, manualClothes: capsuleMode === "simple" ? ids : [], outfits: created.map(outfit => outfit._id), travel: capsuleMode === "travel" ? req.body.travel : undefined, weather: capsuleMode === "travel" ? req.body.weather : undefined, packingRequirements: req.body.packingRequirements });
+  const collection = await Collection.create({ name, capsuleMode, season: normalizedCapsuleSeason(req.body.season), targetPieces: capsuleMode === "simple" ? Math.min(100, Math.max(1, Number(req.body.targetPieces) || 15)) : undefined, description: capsuleMode === "simple" ? "Capsule" : "Capsule bagage", clothes: ids, manualClothes: ids, outfits: [], travel: capsuleMode === "travel" ? req.body.travel : undefined, weather: capsuleMode === "travel" ? req.body.weather : undefined, weatherSnapshot: capsuleMode === "travel" ? req.body.weather : undefined, packingRequirements: req.body.packingRequirements });
   await collection.populate("clothes");
   await collection.populate({ path: "outfits", populate: { path: "clothes" } });
   res.status(201).json(collection);
@@ -165,20 +158,28 @@ router.delete("/:id/outfits/:outfitId", async (req, res) => {
 router.delete("/:id/items/:itemId", async (req, res) => {
   const collection = await Collection.findById(req.params.id);
   if (!collection || !collection.clothes.map(String).includes(req.params.itemId)) return res.status(404).json({ message: "Pièce introuvable dans cette capsule" });
-  const capsuleOutfits = await Outfit.find({ _id: { $in: collection.outfits } });
-  const affectedOutfitIds = capsuleOutfits
-    .filter(outfit => outfit.clothes.map(String).includes(req.params.itemId))
-    .map(outfit => outfit._id);
-  if (affectedOutfitIds.length) {
-    await Outfit.deleteMany({ _id: { $in: affectedOutfitIds } });
-    const affectedIds = new Set(affectedOutfitIds.map(String));
-    collection.outfits = collection.outfits.filter(outfitId => !affectedIds.has(String(outfitId)));
-  }
   collection.manualClothes = collection.manualClothes.filter(itemId => String(itemId) !== req.params.itemId);
-  // The collection list is the source of truth for a capsule. Rebuilding it
-  // from outfits would empty a simple capsule, which intentionally has no
-  // internal outfits, and would also discard standalone packing-list items.
   collection.clothes = collection.clothes.filter(itemId => String(itemId) !== req.params.itemId);
+  collection.outfits = [];
+  await collection.save();
+  res.json(await Collection.findById(collection._id).populate("clothes").populate({ path: "outfits", populate: { path: "clothes" } }));
+});
+router.put("/:id/items/order", async (req, res) => {
+  const collection = await Collection.findById(req.params.id);
+  if (!collection) return res.status(404).json({ message: "Capsule introuvable" });
+
+  const requestedIds = Array.isArray(req.body.clothes) ? req.body.clothes.map(String) : [];
+  const currentIds = collection.clothes.map(String);
+  const currentIdSet = new Set(currentIds);
+  const orderIsValid = requestedIds.length === currentIds.length
+    && new Set(requestedIds).size === requestedIds.length
+    && requestedIds.every(itemId => currentIdSet.has(itemId));
+
+  if (!orderIsValid) return res.status(400).json({ message: "Ordre des pièces invalide" });
+
+  collection.clothes = requestedIds;
+  const manualIdSet = new Set(collection.manualClothes.map(String));
+  collection.manualClothes = requestedIds.filter(itemId => manualIdSet.has(itemId));
   await collection.save();
   res.json(await Collection.findById(collection._id).populate("clothes").populate({ path: "outfits", populate: { path: "clothes" } }));
 });
@@ -188,6 +189,7 @@ router.put("/:id/items", async (req, res) => {
   if (!collection || !item) return res.status(404).json({ message: "Capsule ou pièce introuvable" });
   if (!collection.manualClothes.map(String).includes(String(item._id))) collection.manualClothes.push(item._id);
   if (!collection.clothes.map(String).includes(String(item._id))) collection.clothes.push(item._id);
+  collection.outfits = [];
   await collection.save();
   res.json(await Collection.findById(collection._id).populate("clothes").populate({ path: "outfits", populate: { path: "clothes" } }));
 });
@@ -206,28 +208,192 @@ router.put("/:id/capsule", async (req, res) => {
     if (missingCategories.length) return res.status(400).json({ message: "Une capsule doit conserver au minimum un haut, un bas et une paire de chaussures" });
   }
 
-  const retainedIds = new Set(requestedIds);
-  const capsuleOutfits = await Outfit.find({ _id: { $in: collection.outfits } });
-  const removedOutfits = capsuleOutfits.filter(outfit => outfit.clothes.some(itemId => !retainedIds.has(String(itemId))));
-  if (removedOutfits.length) {
-    await Outfit.deleteMany({ _id: { $in: removedOutfits.map(outfit => outfit._id) } });
-    const removedOutfitIds = new Set(removedOutfits.map(outfit => String(outfit._id)));
-    collection.outfits = collection.outfits.filter(outfitId => !removedOutfitIds.has(String(outfitId)));
-  }
-
   collection.name = req.body.name?.trim() || collection.name;
   collection.capsuleMode = capsuleMode;
+  if (Object.prototype.hasOwnProperty.call(req.body, "season")) collection.season = normalizedCapsuleSeason(req.body.season);
   collection.description = capsuleMode === "simple" ? "Capsule" : "Capsule bagage";
   collection.targetPieces = capsuleMode === "simple" ? Math.min(100, Math.max(1, Number(req.body.targetPieces) || collection.targetPieces || 15)) : collection.targetPieces;
   collection.clothes = requestedIds;
   collection.manualClothes = requestedIds;
+  collection.outfits = [];
   if (capsuleMode === "travel") {
     collection.travel = req.body.travel;
     collection.weather = req.body.weather;
+    collection.weatherSnapshot = req.body.weather;
     collection.packingRequirements = req.body.packingRequirements;
   }
   await collection.save();
   res.json(await Collection.findById(collection._id).populate("clothes").populate({ path: "outfits", populate: { path: "clothes" } }));
+});
+router.put("/:id/travel-checklist", async (req, res) => {
+  const collection = await Collection.findById(req.params.id);
+  if (!collection) return res.status(404).json({ message: "Capsule introuvable" });
+  if (!Array.isArray(req.body.items) || req.body.items.length > 200) {
+    return res.status(400).json({ message: "Checklist invalide" });
+  }
+
+  const keys = new Set();
+  const items = [];
+  for (let index = 0; index < req.body.items.length; index += 1) {
+    const item = req.body.items[index] || {};
+    const key = String(item.key || `travel-${Date.now()}-${index}`).trim().slice(0, 120);
+    const category = String(item.category || "").trim().slice(0, 80);
+    const label = String(item.label || "").trim().slice(0, 140);
+    if (!key || !category || !label || keys.has(key)) {
+      return res.status(400).json({ message: "Chaque élément doit avoir un nom et une catégorie uniques" });
+    }
+    keys.add(key);
+    items.push({ key, category, label, checked: Boolean(item.checked) });
+  }
+
+  collection.travelChecklist = items;
+  await collection.save();
+  res.json(await Collection.findById(collection._id).populate("clothes").populate({ path: "outfits", populate: { path: "clothes" } }));
+});
+router.put("/:id/checklists", async (req, res) => {
+  const collection = await Collection.findById(req.params.id);
+  if (!collection) return res.status(404).json({ message: "Capsule introuvable" });
+  if (!Array.isArray(req.body.checklists) || req.body.checklists.length > 20) {
+    return res.status(400).json({ message: "Sélection de checklists invalide" });
+  }
+
+  try {
+    collection.checklists = req.body.checklists.map((checklist, checklistIndex) => {
+      const name = String(checklist?.name || "").trim().slice(0, 80);
+      if (!name || !Array.isArray(checklist.items) || checklist.items.length > 200) throw new Error("Checklist invalide");
+      const keys = new Set();
+      const items = checklist.items.map((item, itemIndex) => {
+        const key = String(item?.key || `checklist-${checklistIndex}-${itemIndex}-${Date.now()}`).trim().slice(0, 120);
+        const category = String(item?.category || "").trim().slice(0, 80);
+        const label = String(item?.label || "").trim().slice(0, 140);
+        if (!key || !category || !label || keys.has(key)) throw new Error("Chaque élément doit avoir un nom et une catégorie");
+        keys.add(key);
+        return { key, category, label, checked: Boolean(item.checked) };
+      });
+      return {
+        _id: checklist._id || undefined,
+        templateId: checklist.templateId || undefined,
+        name,
+        items
+      };
+    });
+    await collection.save();
+    res.json(await Collection.findById(collection._id).populate("clothes").populate({ path: "outfits", populate: { path: "clothes" } }));
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+router.post("/:id/checklists/:checklistId/sync", async (req, res) => {
+  try {
+    const collection = await Collection.findById(req.params.id);
+    if (!collection) return res.status(404).json({ message: "Capsule introuvable" });
+
+    const checklist = collection.checklists.id(req.params.checklistId);
+    if (!checklist) return res.status(404).json({ message: "Checklist introuvable dans cette capsule" });
+
+    let template = checklist.templateId
+      ? await ChecklistTemplate.findById(checklist.templateId)
+      : null;
+    if (!template) {
+      template = await ChecklistTemplate.findOne({
+        name: { $regex: `^${String(checklist.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" }
+      });
+    }
+    if (!template) return res.status(404).json({ message: "Le modèle global de cette checklist est introuvable" });
+
+    const existingByKey = new Map(checklist.items.map(item => [item.key, item]));
+    const templateKeys = new Set(template.items.map(item => item.key));
+    const synchronizedItems = template.items.map(item => ({
+      key: item.key,
+      category: item.category,
+      label: item.label,
+      checked: Boolean(existingByKey.get(item.key)?.checked)
+    }));
+    checklist.items.forEach(item => {
+      if (!templateKeys.has(item.key)) {
+        synchronizedItems.push({
+          key: item.key,
+          category: item.category,
+          label: item.label,
+          checked: Boolean(item.checked)
+        });
+      }
+    });
+
+    checklist.templateId = template._id;
+    checklist.name = template.name;
+    checklist.items = synchronizedItems;
+    await collection.save();
+
+    res.json(await Collection.findById(collection._id)
+      .populate("clothes")
+      .populate({ path: "outfits", populate: { path: "clothes" } }));
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+router.post("/:id/checklists/:checklistId/publish", async (req, res) => {
+  try {
+    const collection = await Collection.findById(req.params.id);
+    if (!collection) return res.status(404).json({ message: "Capsule introuvable" });
+
+    const checklist = collection.checklists.id(req.params.checklistId);
+    if (!checklist) return res.status(404).json({ message: "Checklist introuvable dans cette capsule" });
+
+    let template = checklist.templateId
+      ? await ChecklistTemplate.findById(checklist.templateId)
+      : null;
+    if (!template) {
+      template = await ChecklistTemplate.findOne({
+        name: { $regex: `^${String(checklist.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" }
+      });
+    }
+    if (!template) {
+      template = new ChecklistTemplate({ name: checklist.name || "Checklist", items: [] });
+    }
+
+    const itemSignature = item => `${String(item.category).trim().toLocaleLowerCase("fr")}::${String(item.label).trim().toLocaleLowerCase("fr")}`;
+    const mergedItems = template.items.map(item => ({
+      key: item.key,
+      category: item.category,
+      label: item.label
+    }));
+    const itemIndexByKey = new Map(mergedItems.map((item, index) => [item.key, index]));
+    const signatures = new Set(mergedItems.map(itemSignature));
+
+    checklist.items.forEach(item => {
+      const normalized = {
+        key: item.key,
+        category: item.category,
+        label: item.label
+      };
+      const existingIndex = itemIndexByKey.get(normalized.key);
+      if (existingIndex !== undefined) {
+        signatures.delete(itemSignature(mergedItems[existingIndex]));
+        mergedItems[existingIndex] = normalized;
+        signatures.add(itemSignature(normalized));
+        return;
+      }
+      const signature = itemSignature(normalized);
+      if (signatures.has(signature)) return;
+      itemIndexByKey.set(normalized.key, mergedItems.length);
+      signatures.add(signature);
+      mergedItems.push(normalized);
+    });
+
+    template.name = checklist.name || template.name;
+    template.items = mergedItems;
+    await template.save();
+
+    if (!checklist.templateId) {
+      checklist.templateId = template._id;
+      await collection.save();
+    }
+
+    res.json(template);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
 });
 router.put("/:id", async (req, res) => {
   const collection = await Collection.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true }).populate("clothes").populate({ path: "outfits", populate: { path: "clothes" } });
@@ -238,9 +404,6 @@ router.delete("/:id", async (req, res) => {
   const collection = await Collection.findById(req.params.id);
   if (!collection) return res.status(404).json({ message: "Collection introuvable" });
   if (collection.description === "Capsule bagage" && req.query.confirm !== "capsule") return res.status(400).json({ message: "Confirmez explicitement la suppression de la capsule" });
-  if (collection.description === "Capsule bagage" && collection.outfits.length) {
-    await Outfit.deleteMany({ _id: { $in: collection.outfits } });
-  }
   await collection.deleteOne();
   res.status(204).end();
 });

@@ -8,6 +8,7 @@ import collectionRoutes from "./routes/collections.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import uploadRoutes, { uploadsDir } from "./routes/uploads.js";
 import weatherRoutes from "./routes/weather.js";
+import checklistRoutes from "./routes/checklists.js";
 import { notFound, errorHandler } from "./middleware/error.js";
 
 const app = express();
@@ -29,6 +30,7 @@ app.use("/api/collections", collectionRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/uploads", uploadRoutes);
 app.use("/api/weather", weatherRoutes);
+app.use("/api/checklists", checklistRoutes);
 app.use(notFound);
 app.use(errorHandler);
 export default app;

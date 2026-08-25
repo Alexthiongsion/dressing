@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from "react-router";
-import { Home, Luggage, Settings2, Shirt, Sparkles } from "lucide-react";
+import { Home, ListChecks, Luggage, Settings2, Shirt, Sparkles } from "lucide-react";
 export default function Layout() {
-  const links = [["/", Home, "Accueil"], ["/wardrobe", Shirt, "Garde-robe"], ["/outfits", Sparkles, "Outfits"], ["/capsules", Luggage, "Capsules"], ["/settings", Settings2, "Réglages"]];
+  const links = [["/", Home, "Accueil"], ["/wardrobe", Shirt, "Garde-robe"], ["/outfits", Sparkles, "Outfits"], ["/capsules", Luggage, "Capsules"], ["/checklists", ListChecks, "Checklists"], ["/settings", Settings2, "Réglages"]];
   return <div className="app-shell">
     <a className="skip-link" href="#main-content">Aller au contenu</a>
     <aside aria-label="Navigation principale">

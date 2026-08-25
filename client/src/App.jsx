@@ -11,6 +11,7 @@ import OutfitMultiCreate from "./pages/OutfitMultiCreate";
 import OutfitAssist from "./pages/OutfitAssist";
 import CapsuleCreate from "./pages/CapsuleCreate";
 import Settings from "./pages/Settings";
+import Checklists from "./pages/Checklists";
 import { api, uploadImage } from "./services/api";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
@@ -212,6 +213,7 @@ export default function App() {
             <Route path="capsules" element={<Capsules />} />
             <Route path="capsules/:capsuleId" element={<Capsules />} />
             <Route path="capsules/new" element={<CapsuleCreate />} />
+            <Route path="checklists" element={<Checklists />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Route>

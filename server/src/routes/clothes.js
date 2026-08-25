@@ -32,8 +32,28 @@ router.put("/:id/compatibility", async (req, res) => {
   res.json(item);
 });
 router.put("/:id", async (req, res) => {
-  const item = await Clothing.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+  const item = await Clothing.findById(req.params.id);
   if (!item) return res.status(404).json({ message: "Vêtement introuvable" });
+
+  const categoryChanged = Object.prototype.hasOwnProperty.call(req.body, "category")
+    && req.body.category !== item.category;
+
+  // Une matrice configurée pour l'ancienne catégorie n'est plus valable.
+  // On retire également les liens inverses afin que la pièce réapparaisse
+  // immédiatement dans le wizard, notamment après un classement en Accessoire.
+  if (categoryChanged) {
+    await Clothing.updateMany(
+      { compatibleWith: item._id },
+      { $pull: { compatibleWith: item._id } },
+    );
+  }
+
+  item.set(req.body);
+  if (categoryChanged) {
+    item.compatibleWith = [];
+    item.compatibilityConfigured = false;
+  }
+  await item.save();
   res.json(item);
 });
 router.delete("/:id", async (req, res) => {

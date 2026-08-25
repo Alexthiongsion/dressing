@@ -162,6 +162,7 @@
 
 .clothing-compatibility-list{display:grid;gap:10px;padding-top:4px}.clothing-compatibility-list>header{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid #ddd9cf}.clothing-compatibility-list>header>div{display:flex;align-items:center;gap:8px}.clothing-compatibility-list h3{margin:0;font-size:18px}.clothing-compatibility-list>header strong{display:grid;place-items:center;min-width:30px;height:30px;padding:0 8px;border-radius:999px;background:#171714;color:#fff;font-size:12px}.clothing-compatibility-list>div{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));grid-auto-rows:188px;align-content:start;gap:9px;height:385px;overflow-y:auto}.clothing-compatibility-list article{min-width:0;height:188px;overflow:hidden;border:1px solid #ddd9cf;border-radius:9px;background:#fff}.clothing-compatibility-list article>img,.clothing-compatibility-list article>span{display:block;width:100%;height:145px;background:#ebe9e1;object-fit:contain}.clothing-compatibility-list article>footer{display:grid;gap:1px;height:43px;padding:6px 8px}.clothing-compatibility-list article b,.clothing-compatibility-list article small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.clothing-compatibility-list article b{font-size:12px}.clothing-compatibility-list article small{color:#777;font-size:10px}.compatibility-list-status{display:flex;align-items:center;justify-content:center;gap:7px;min-height:82px;margin:0;border-radius:8px;background:#eeece5;color:#777;font-size:13px}@media(max-width:650px){.clothing-compatibility-list>div{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:175px;height:360px}.clothing-compatibility-list article{height:175px}.clothing-compatibility-list article>img,.clothing-compatibility-list article>span{height:132px}}
 .clothing-details-summary{display:grid;grid-template-columns:150px minmax(0,1fr);align-items:center;gap:18px;padding:10px;border:1px solid #ddd9cf;border-radius:11px;background:#fff}.clothing-details-summary>img,.clothing-details-summary>span{width:150px;height:155px;border-radius:8px;background:#ebe9e1;object-fit:contain}.clothing-details-summary h3{margin:4px 0;font-size:24px}.clothing-details-summary p{margin:5px 0 0;color:#777}.compatibility-list-actions{display:flex;align-items:center;gap:7px}.clothing-compatibility-list>header .compatibility-list-actions>button{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid #cbc8bd;border-radius:7px;background:#fff;font-size:12px;font-weight:700}@media(max-width:650px){.clothing-details-summary{grid-template-columns:95px 1fr}.clothing-details-summary>img,.clothing-details-summary>span{width:95px;height:105px}.compatibility-list-actions button{width:34px;height:34px;padding:0!important;font-size:0!important}.compatibility-list-actions button svg{margin:auto}}
+.clothing-category-control{display:grid;gap:5px;max-width:280px}.clothing-category-control>span{display:flex;align-items:center;justify-content:space-between;color:#777;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.clothing-category-control>span small{font-size:11px;font-weight:500;letter-spacing:0;text-transform:none}.clothing-category-control select{min-height:40px;padding:7px 34px 7px 10px}
 .clothing-details-form .compatibility-list-status{min-height:385px}
 .modal:has(.clothing-details-form){height:min(820px,90vh);overflow:hidden}
 .modal:has(.clothing-details-form)>.clothing-details-form{height:calc(100% - 58px);min-height:0;overflow-y:auto}
@@ -440,6 +441,12 @@ form.outfit-builder-page .outfit-vertical-stack{padding-top:42px}form.outfit-bui
 .capsule-detail-tabbed>.capsule-detail-summary>div{display:flex;align-items:baseline;gap:6px}
 .capsule-detail-tabbed>.capsule-detail-summary strong{font-family:'Syne';font-size:24px}
 .capsule-detail-tabbed>.capsule-detail-summary span{color:#777;font-size:12px}
+.capsule-travel-history{display:flex;align-items:stretch;gap:8px;padding:0 1px;overflow-x:auto;scrollbar-width:thin}
+.capsule-travel-history>article{display:flex;flex:1 0 330px;align-items:center;justify-content:space-between;gap:14px;min-height:62px;padding:9px 12px;border:1px solid #d8e6c9;border-radius:10px;background:#f2f8eb}
+.capsule-travel-history>article>div:first-child{display:grid;min-width:0}.capsule-travel-history>article>div:first-child strong,.capsule-travel-history>article>div:first-child span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.capsule-travel-history>article>div:first-child span{margin-top:3px;color:#67675f;font-size:11px}
+.capsule-temperature-comparison{display:flex;align-items:center;gap:7px}.capsule-temperature-comparison>span{display:grid;gap:1px}.capsule-temperature-comparison small{color:#777;font-size:9px;text-transform:uppercase}.capsule-temperature-comparison b{white-space:nowrap;font-size:14px}
+.capsule-travel-history>article>em{padding:5px 7px;border-radius:999px;background:#e1efd2;color:#52663c;font-size:10px;font-style:normal;font-weight:700;white-space:nowrap}.capsule-travel-history>article.changed{border-color:#e8ddbb;background:#faf6e8}.capsule-travel-history>article.changed>em{background:#eee3bd;color:#725f24}
+.capsule-travel-history>p{align-self:center;flex:0 0 190px;margin:0;color:#777;font-size:10px;line-height:1.35}
 .app-shell nav.capsule-detail-tabs{display:flex;gap:4px;margin:0;padding:3px;border-bottom:1px solid #dcd9d0}
 .capsule-detail-tabs button{display:inline-flex;align-items:center;gap:7px;min-height:38px;padding:7px 13px;border:0;border-radius:8px 8px 0 0;background:transparent;color:#777;font-weight:700}
 .capsule-detail-tabs button span{display:grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:#eceae3;color:#666;font-size:11px}
@@ -452,6 +459,14 @@ form.outfit-builder-page .outfit-vertical-stack{padding-top:42px}form.outfit-bui
 .page-dialog-content .packing-list-tab>div{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;overflow:visible}
 .packing-list-tab .packing-list-row{min-height:66px;padding:4px}
 .packing-list-tab .packing-list-row>button{opacity:.25}.packing-list-tab .packing-list-row:hover>button{opacity:1}
+.capsule-item-drag-handle{position:absolute;z-index:5;top:10px;left:10px;display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:rgb(255 255 255 / 94%);color:#171714;box-shadow:0 2px 8px #0002;opacity:0;cursor:grab;transition:opacity .15s,transform .15s}
+.capsule-item-drag-handle:hover{transform:scale(1.05)}
+.capsule-item-drag-handle:active{cursor:grabbing}
+.simple-capsule-piece:hover .capsule-item-drag-handle,.packing-list-row:hover .capsule-item-drag-handle{opacity:1}
+.packing-list-row .capsule-item-drag-handle{left:43px}
+.capsule-item-dragging{opacity:.42}
+.capsule-item-drop-target{box-shadow:inset 0 0 0 3px #171714!important}
+@media (hover:none){.capsule-item-drag-handle{opacity:1}}
 
 /* Bagages : des cartes visuelles au même niveau que le reste de l'application. */
 .page-dialog-content .packing-list-tab>div{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
@@ -498,6 +513,7 @@ form.outfit-builder-page .outfit-vertical-stack{padding-top:42px}form.outfit-bui
 .capsule-outfit-menu>div{position:absolute;top:42px;right:0;z-index:20;display:grid;width:190px;padding:5px;border:1px solid #d8d6cd;border-radius:9px;background:#fff;box-shadow:0 12px 28px #0002}
 .capsule-outfit-menu>div button{display:flex;align-items:center;gap:8px;width:100%;padding:9px;border:0;border-radius:6px;background:#fff;text-align:left}.capsule-outfit-menu>div button:hover{background:#f0eee7}.capsule-outfit-menu>div button.danger{color:#a52a2a}
 @media(max-width:800px){.page-dialog-content .capsule-detail-tabbed{height:auto}.page-dialog-content .capsule-outfits-rows>article{grid-template-columns:1fr 38px}.capsule-outfit-row-header{grid-column:1}.page-dialog-content .capsule-outfit-items{grid-column:1/-1;grid-row:2}.capsule-outfit-menu{grid-column:2;grid-row:1}.page-dialog-content .packing-list-tab>div{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:800px){.capsule-travel-history>article{flex-basis:300px}.capsule-travel-history>article>em{display:none}}
 
 /* Sélecteur de pièces des capsules : images lisibles et validation toujours visible. */
 .modal:has(form.stack>.replacement-grid){width:min(1100px,100%);max-width:1100px;height:min(760px,90vh);overflow:hidden}.modal:has(form.stack>.replacement-grid)>header{height:46px}.modal form.stack:has(>.replacement-grid){grid-template-rows:auto auto minmax(0,1fr) auto;height:calc(100% - 54px);min-height:0}.modal form.stack>.replacement-grid{min-height:0;max-height:none;grid-auto-rows:160px;align-content:start;overflow-y:auto}.modal .replacement-grid .clothing-card{height:160px}.modal .replacement-grid .card-image{width:100%;height:100%;aspect-ratio:auto}.modal .replacement-grid .card-body{display:none}@media(max-width:700px){.modal form.stack>.replacement-grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:145px}}
@@ -613,6 +629,8 @@ form.outfit-builder-page .outfit-vertical-stack{padding-top:42px}form.outfit-bui
 
 /* Cartes capsule : l'image reste dominante, les actions sont secondaires. */
 .capsule-card{position:relative}.capsule-card-media{position:relative}.capsule-card .capsule-card-actions{position:absolute;top:10px;right:10px;z-index:2;display:flex;gap:6px;opacity:0;transform:translateY(-3px);transition:opacity .15s ease,transform .15s ease}.capsule-card:hover .capsule-card-actions,.capsule-card:focus-within .capsule-card-actions{opacity:1;transform:none}.capsule-card-actions>button{display:grid;place-items:center;width:34px;height:34px;padding:0;border:0;border-radius:50%;background:#171714;color:#fff;box-shadow:0 4px 12px #0003}.capsule-card-actions>button.danger{background:#a52a2a;color:#fff}.capsule-card-footer{display:grid!important;gap:8px!important;padding:12px 14px!important}.capsule-card-footer .outfit-card-name h3{font-size:18px;line-height:1.2}.capsule-card-details{display:flex;align-items:center;gap:7px;min-width:0}.capsule-card-details>span,.capsule-card-details>button{display:inline-flex;align-items:center;gap:5px;min-height:30px;padding:5px 8px;border:0;border-radius:999px;background:#efede7;color:#666;font-size:12px;font-weight:700;white-space:nowrap}.capsule-card-details>button.rated{background:#fff1bd;color:#8a6700}.capsule-card-chevron{margin-left:auto;color:#777}.capsule-card:focus-visible{outline:3px solid #171714;outline-offset:3px}@media(hover:none){.capsule-card .capsule-card-actions{opacity:1;transform:none}}@media(max-width:500px){.capsule-card-details>span{padding-inline:6px}.capsule-card-footer .outfit-card-name h3{font-size:17px}}
+.capsule-card-seasons{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0}
+.capsule-card-seasons>span{display:inline-flex;align-items:center;min-height:26px;padding:4px 8px;border-radius:999px;background:#edf4e3;color:#526b32;font-size:11px;font-weight:800;white-space:nowrap}
 
 /* Le menu d'actions doit pouvoir dépasser de la barre de filtres. */
 .wardrobe-filters{overflow:visible}
@@ -646,3 +664,1391 @@ form.outfit-builder-page .outfit-vertical-stack{padding-top:42px}form.outfit-bui
 }
 @media(max-width:1100px) and (min-width:701px){.capsule-audit-grid{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr))}.capsule-audit>header{grid-template-columns:1fr 1fr}.capsule-audit-actions{grid-column:1/-1}}
 @media(max-width:700px){.capsule-audit{overflow:visible}.capsule-audit>header{grid-template-columns:1fr}.capsule-audit-actions{justify-content:space-between}.capsule-audit-grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:none;grid-auto-rows:240px;overflow:visible}.capsule-audit-grid>article>footer{align-items:flex-start;flex-direction:column}.capsule-audit-grid>article>footer p{white-space:normal}}
+
+/* Complétion de capsule : deux lignes de grandes cartes dans un rail horizontal. */
+.capsule-stage-suggest .completion-library-minimal{
+  grid-template-rows:auto minmax(0,1fr)
+}
+.capsule-stage-suggest .completion-library-minimal>.suggestion-carousel{
+  display:grid;
+  grid-template-columns:none;
+  grid-template-rows:repeat(2,minmax(0,1fr));
+  grid-auto-flow:column;
+  grid-auto-columns:calc((100% - 32px)/5);
+  align-items:stretch;
+  justify-content:start;
+  width:100%;
+  height:100%;
+  min-height:0;
+  margin:0;
+  padding:1px 1px 8px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  overscroll-behavior-inline:contain;
+  scroll-snap-type:x proximity;
+  scrollbar-gutter:stable
+}
+.capsule-stage-suggest .completion-library-minimal>.suggestion-carousel>.suggestion-tile{
+  scroll-snap-align:start
+}
+@media(max-width:1200px) and (min-width:701px){
+  .capsule-stage-suggest .completion-library-minimal>.suggestion-carousel{
+    grid-auto-columns:calc((100% - 24px)/4)
+  }
+}
+@media(max-width:700px){
+  .capsule-stage-suggest .completion-library-minimal{
+    min-height:520px
+  }
+  .capsule-stage-suggest .completion-library-minimal>.suggestion-carousel{
+    grid-template-rows:repeat(2,180px);
+    grid-auto-columns:min(70vw,260px);
+    height:auto;
+    align-content:start
+  }
+}
+.app-shell nav.capsule-baggage-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border, #dedbd2);
+}
+
+.app-shell nav.capsule-baggage-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #706e68;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-shell nav.capsule-baggage-tabs button:hover {
+  background: #efede7;
+  color: #151513;
+}
+
+.app-shell nav.capsule-baggage-tabs button.active {
+  background: #151513;
+  color: #fff;
+}
+
+.app-shell nav.capsule-baggage-tabs button span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .07);
+  font-size: .8rem;
+}
+
+.app-shell nav.capsule-baggage-tabs button.active span {
+  background: rgba(255, 255, 255, .16);
+}
+
+.travel-checklist-panel {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border, #dedbd2);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.travel-checklist-panel > header,
+.travel-checklist-group > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.travel-checklist-panel > header h3,
+.travel-checklist-group h4 {
+  margin: 0;
+}
+
+.travel-checklist-panel > header p {
+  margin: 3px 0 0;
+  color: #74716a;
+}
+
+.travel-checklist-panel > header > strong {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: #151513;
+  color: #fff;
+}
+
+.travel-checklist-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.travel-checklist-header-actions > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--border, #dedbd2);
+  border-radius: 10px;
+  background: #fff;
+  color: #151513;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.travel-checklist-header-actions > button:hover:not(:disabled) {
+  background: #f3f1eb;
+}
+
+.travel-checklist-header-actions > button:disabled {
+  cursor: wait;
+  opacity: .55;
+}
+
+.travel-checklist-header-actions > strong {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: #151513;
+  color: #fff;
+}
+
+.travel-checklist-header-actions .spinning {
+  animation: checklist-spin .8s linear infinite;
+}
+
+@keyframes checklist-spin {
+  to { transform: rotate(360deg); }
+}
+
+.travel-checklist-add {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(190px, .42fr) auto;
+  gap: 8px;
+  position: relative;
+}
+
+.travel-checklist-add input,
+.travel-checklist-submit,
+.travel-checklist-category-picker summary {
+  min-height: 42px;
+  border: 1px solid var(--border, #dedbd2);
+  border-radius: 9px;
+  font: inherit;
+}
+
+.travel-checklist-add input {
+  min-width: 0;
+  padding: 0 12px;
+  background: #fff;
+}
+
+.travel-checklist-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 16px;
+  background: #151513;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.travel-checklist-submit:disabled,
+.travel-checklist-row button:disabled {
+  opacity: .45;
+  cursor: wait;
+}
+
+.travel-checklist-category-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.travel-checklist-category-picker summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  background: #fff;
+  cursor: pointer;
+  list-style: none;
+}
+
+.travel-checklist-category-picker summary::-webkit-details-marker {
+  display: none;
+}
+
+.travel-checklist-category-picker summary span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.travel-checklist-category-picker summary small {
+  color: #77746d;
+  font-size: .67rem;
+  font-weight: 600;
+}
+
+.travel-checklist-category-picker[open] summary {
+  border-color: #151513;
+}
+
+.travel-checklist-category-picker[open] summary svg {
+  transform: rotate(180deg);
+}
+
+.travel-checklist-category-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 7px);
+  right: 0;
+  width: min(330px, 82vw);
+  padding: 12px;
+  border: 1px solid var(--border, #dedbd2);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 14px 35px rgba(21, 21, 19, .14);
+}
+
+.travel-checklist-category-menu > strong {
+  display: block;
+  margin-bottom: 9px;
+  font-size: .8rem;
+}
+
+.travel-checklist-category-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.travel-checklist-category-options button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border, #dedbd2);
+  border-radius: 999px;
+  background: #fff;
+  color: #151513;
+  font: inherit;
+  font-size: .78rem;
+  cursor: pointer;
+}
+
+.travel-checklist-category-options button.active {
+  border-color: #151513;
+  background: #151513;
+  color: #fff;
+}
+
+.travel-checklist-new-category {
+  display: grid;
+  grid-template-columns: 1fr 38px;
+  gap: 7px;
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border, #dedbd2);
+}
+
+.travel-checklist-new-category input {
+  min-height: 38px;
+}
+
+.travel-checklist-new-category button {
+  display: grid;
+  place-items: center;
+  min-height: 38px;
+  border: 0;
+  border-radius: 9px;
+  background: #151513;
+  color: #fff;
+  cursor: pointer;
+}
+
+.travel-checklist-new-category button:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+.travel-checklist-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.travel-checklist-group {
+  align-self: start;
+  overflow: hidden;
+  border: 1px solid var(--border, #dedbd2);
+  border-radius: 11px;
+  background: #faf9f6;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.travel-checklist-group.drop-target {
+  border-color: #8d8a83;
+  box-shadow: 0 0 0 2px rgba(21, 21, 19, .09);
+}
+
+.travel-checklist-group > header {
+  min-height: 44px;
+  padding: 0 13px;
+  border-bottom: 1px solid var(--border, #dedbd2);
+}
+
+.travel-checklist-group > header .checklist-category-actions > span {
+  color: #77746e;
+  font-size: .86rem;
+  font-weight: 700;
+}
+
+.travel-checklist-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 7px 0 6px;
+  border-bottom: 1px solid #e8e5dd;
+  background: #fff;
+  cursor: grab;
+  transition: opacity .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+.travel-checklist-row:active {
+  cursor: grabbing;
+}
+
+.travel-checklist-row.dragging {
+  opacity: .4;
+}
+
+.travel-checklist-row.drop-target {
+  box-shadow: inset 0 3px 0 #151513;
+}
+
+.travel-checklist-drag-handle {
+  color: #a09d96;
+  pointer-events: none;
+}
+
+.travel-checklist-row:last-child {
+  border-bottom: 0;
+}
+
+.travel-checklist-row label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.travel-checklist-row input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #151513;
+}
+
+.travel-checklist-row label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.travel-checklist-row.checked label span {
+  color: #85827c;
+  text-decoration: line-through;
+}
+
+.travel-checklist-row > button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  place-items: center;
+  background: transparent;
+  color: #8b8881;
+  cursor: pointer;
+}
+
+.travel-checklist-row > button:hover {
+  background: #efede7;
+  color: #151513;
+}
+
+.travel-checklist-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 32px;
+  border: 1px dashed var(--border, #dedbd2);
+  border-radius: 11px;
+  color: #77746e;
+  text-align: center;
+}
+
+.travel-checklist-saving {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #151513;
+  color: #fff;
+  font-size: .78rem;
+}
+
+@media (max-width: 760px) {
+  .capsule-baggage-tabs {
+    overflow-x: auto;
+  }
+
+  .capsule-baggage-tabs button {
+    flex: 0 0 auto;
+  }
+
+  .travel-checklist-add,
+  .travel-checklist-groups {
+    grid-template-columns: 1fr;
+  }
+}
+
+.checklists-page {
+  display: grid;
+  max-width: 1500px;
+  margin: 0 auto;
+  gap: 18px;
+}
+
+.checklists-page > .page-header {
+  margin-bottom: 0;
+}
+
+.checklist-manager {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  min-height: calc(100vh - 210px);
+  gap: 14px;
+}
+
+.app-shell .checklist-template-list {
+  position: static;
+  display: grid;
+  height: auto;
+  min-height: 0;
+  padding: 10px;
+  align-content: start;
+  gap: 7px;
+  border: 1px solid var(--border, #dedbd2);
+  border-radius: 14px;
+  background: #fff;
+  color: #171714;
+}
+
+.checklist-template-list > button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  width: 100%;
+  padding: 13px;
+  align-items: center;
+  gap: 11px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.checklist-template-list > button:hover {
+  background: #f3f1eb;
+}
+
+.checklist-template-list > button.active {
+  background: #171714;
+  color: #fff;
+}
+
+.checklist-template-list > button span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.checklist-template-list > button strong,
+.checklist-template-list > button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checklist-template-list > button small {
+  color: #85827c;
+}
+
+.checklist-template-list > button.active small {
+  color: #c8c6bf;
+}
+
+.checklist-template-editor {
+  display: grid;
+  min-width: 0;
+  padding: 16px;
+  align-content: start;
+  gap: 16px;
+  border: 1px solid var(--border, #dedbd2);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.checklist-editor-heading {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.checklist-editor-heading > label {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+}
+
+.checklist-editor-heading label > span,
+.checklist-add-item label > span {
+  font-size: .8rem;
+  font-weight: 750;
+}
+
+.checklist-editor-heading input,
+.checklist-add-item input,
+.checklist-editor-item input {
+  width: 100%;
+}
+
+.checklist-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.checklist-add-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, .55fr) auto;
+  padding: 14px;
+  align-items: end;
+  gap: 10px;
+  border-radius: 11px;
+  background: #f5f3ee;
+}
+
+.checklist-add-item label {
+  display: grid;
+  gap: 6px;
+}
+
+.checklist-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 0;
+  gap: 12px;
+}
+
+.checklist-groups > section {
+  overflow: hidden;
+  align-self: start;
+  border: 1px solid var(--border, #dedbd2);
+  border-radius: 11px;
+}
+
+.checklist-groups h2 {
+  display: flex;
+  margin: 0;
+  padding: 12px 13px;
+  align-items: center;
+  justify-content: space-between;
+  background: #f3f1eb;
+  font-size: 1rem;
+}
+
+.checklist-groups h2 > .checklist-category-actions > span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #fff;
+  color: #77746e;
+  font-size: .75rem;
+}
+
+.checklist-category-title {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.checklist-category-title:hover {
+  opacity: .62;
+}
+
+.checklist-category-title h4,
+.checklist-category-title span {
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.checklist-category-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.checklist-category-icon-button,
+.checklist-category-rename button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #d8d4ca;
+  border-radius: 50%;
+  background: #fff;
+  color: #171714;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.checklist-category-icon-button:hover,
+.checklist-category-rename button:hover {
+  border-color: #171714;
+}
+
+.checklist-category-rename {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.checklist-category-rename input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid #aaa69c;
+  border-radius: 7px;
+  background: #fff;
+  font: inherit;
+  font-weight: 700;
+}
+
+.checklist-category-quick-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border, #dedbd2);
+  background: #f8f7f3;
+}
+
+.checklist-category-quick-add input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #d8d4ca;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.checklist-category-quick-add button {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid #171714;
+  border-radius: 8px;
+  background: #171714;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.checklist-category-quick-add button:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+.checklist-category-quick-add button.is-icon-only {
+  width: 36px;
+  padding: 0;
+  border-color: #d8d4ca;
+  background: #fff;
+  color: #171714;
+}
+
+.checklist-editor-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  border-top: 1px solid var(--border, #dedbd2);
+}
+
+.checklist-editor-item input {
+  min-width: 0;
+  padding: 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.checklist-editor-item button {
+  display: grid;
+  border: 0;
+  border-left: 1px solid var(--border, #dedbd2);
+  background: transparent;
+  color: #77746e;
+  place-items: center;
+  cursor: pointer;
+}
+
+.checklist-editor-item button:hover {
+  background: #f3f1eb;
+  color: #171714;
+}
+
+.capsule-baggage-tabs .manage-checklists {
+  margin-left: auto;
+  border: 1px dashed #aaa69c;
+  background: transparent;
+  color: #5f5c56;
+}
+
+.capsule-checklist-manager {
+  display: grid;
+  gap: 17px;
+}
+
+.capsule-checklist-manager > p {
+  margin: 0;
+  color: #6f6c66;
+}
+
+.capsule-checklist-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.capsule-checklist-picker label {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  padding: 14px;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--border, #dedbd2);
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.capsule-checklist-picker label:hover {
+  background: #f5f3ee;
+}
+
+.capsule-checklist-picker label.selected {
+  border-color: #171714;
+  box-shadow: inset 0 0 0 1px #171714;
+}
+
+.capsule-checklist-picker label span {
+  display: grid;
+  gap: 2px;
+}
+
+.capsule-checklist-picker label small {
+  color: #77746e;
+}
+
+.capsule-checklist-manager > footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.capsule-checklist-hint {
+  color: #77746e;
+  text-align: right;
+}
+
+@media (max-width: 820px) {
+  .checklist-manager,
+  .checklist-groups,
+  .capsule-checklist-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .checklist-template-list {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(200px, 1fr);
+    overflow-x: auto;
+  }
+
+  .checklist-editor-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .checklist-add-item {
+    grid-template-columns: 1fr;
+  }
+}
+
+/*
+ * L'étape de complétion n'a pas toujours un bandeau météo (capsule sans
+ * voyage). Ne pas réserver une ligne fixe de 58 px dans ce cas : elle
+ * écrasait toute la bibliothèque de pièces et pouvait recouvrir les clics
+ * de navigation.
+ */
+@media (min-width: 901px) {
+  .capsule-create-flow.capsule-stage-suggest {
+    grid-template-rows: auto minmax(0, 1fr) !important;
+  }
+
+  .capsule-create-flow.capsule-stage-suggest:has(> .travel-weather-summary) {
+    grid-template-rows: auto 58px minmax(0, 1fr) !important;
+  }
+
+  .capsule-stage-suggest > .capsule-completion-minimal {
+    min-height: 0;
+  }
+}
+
+/* Capsule sans voyage : une composition compacte en trois niveaux. */
+.capsule-detail-content:has(> .simple-capsule-composition) {
+  overflow: hidden;
+}
+
+.simple-capsule-composition {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  height: 100%;
+  min-height: 0;
+}
+
+.simple-capsule-composition-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 38px;
+  padding: 0 2px 5px;
+  border-bottom: 1px solid #dedbd2;
+}
+
+.simple-capsule-composition-header h3,
+.simple-capsule-composition-header p {
+  margin: 0;
+}
+
+.simple-capsule-composition-header h3 {
+  font-size: 20px;
+}
+
+.simple-capsule-composition-header p {
+  display: none;
+}
+
+.simple-capsule-composition-header > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #cbc7bc;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.simple-capsule-tiers {
+  display: grid;
+  grid-template-rows: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, .9fr);
+  gap: 6px;
+  min-height: 0;
+}
+
+.simple-capsule-tiers:has(> .simple-capsule-tier:only-child) {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.simple-capsule-tier {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #dedbd2;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.simple-capsule-tier > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 11px 9px;
+  border-right: 1px solid #e4e1d8;
+  background: #f8f7f3;
+}
+
+.simple-capsule-tier > header > span {
+  color: #9a978f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.simple-capsule-tier > header h4,
+.simple-capsule-tier > header small {
+  display: block;
+  margin: 0;
+}
+
+.simple-capsule-tier > header h4 {
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+.simple-capsule-tier > header small {
+  margin-top: 5px;
+  color: #77746e;
+  font-size: 10px;
+}
+
+.simple-capsule-tier-track {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  padding: 5px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
+}
+
+.simple-capsule-piece {
+  position: relative;
+  flex: 0 0 clamp(220px, 24vw, 380px);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #dedbd2;
+  border-radius: 9px;
+  background: #eeece5;
+  scroll-snap-align: start;
+}
+
+.simple-capsule-tier-bottom .simple-capsule-piece {
+  flex-basis: clamp(220px, 24vw, 380px);
+}
+
+.simple-capsule-tier-shoes .simple-capsule-piece {
+  flex-basis: clamp(220px, 24vw, 380px);
+}
+
+.simple-capsule-piece-open {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.simple-capsule-piece-open img,
+.simple-capsule-piece-open > i {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  transition: transform .18s ease;
+}
+
+.simple-capsule-piece:hover .simple-capsule-piece-open img {
+  transform: scale(1.035);
+}
+
+.simple-capsule-piece-category,
+.simple-capsule-piece-score,
+.simple-capsule-piece-remove {
+  position: absolute;
+  z-index: 2;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+}
+
+.simple-capsule-piece-category {
+  left: 8px;
+  bottom: 8px;
+  padding: 5px 8px;
+  background: rgb(255 255 255 / 92%);
+  color: #171714;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.simple-capsule-piece-score {
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 7px;
+  background: #171714;
+  color: #fff;
+  font-size: 11px;
+}
+
+.simple-capsule-piece-remove {
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: rgb(255 255 255 / 92%);
+  color: #b92d2d;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity .15s ease;
+}
+
+.simple-capsule-piece:hover .simple-capsule-piece-remove,
+.simple-capsule-piece-remove:focus-visible {
+  opacity: 1;
+}
+
+.simple-capsule-tier-add {
+  display: grid;
+  flex: 0 0 82px;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  min-height: 100%;
+  border: 1px dashed #c8c5bb;
+  border-radius: 9px;
+  background: #faf9f6;
+  color: #77746e;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  scroll-snap-align: start;
+}
+
+.simple-capsule-tier-add:hover {
+  border-color: #171714;
+  color: #171714;
+}
+
+.page-dialog-content.modal:has(.simple-capsule-detail) > header {
+  margin-bottom: 5px;
+}
+
+.page-dialog-content.modal:has(.simple-capsule-detail) > header h2 {
+  font-size: 28px;
+}
+
+.simple-capsule-detail {
+  gap: 5px !important;
+}
+
+.simple-capsule-detail > .capsule-detail-summary {
+  min-height: 42px !important;
+  padding: 4px 8px !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+}
+
+.simple-capsule-detail > .capsule-detail-summary > div:first-child strong {
+  font-size: 20px;
+}
+
+.simple-capsule-detail .capsule-category-summary {
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.simple-capsule-detail .capsule-category-summary::-webkit-scrollbar {
+  display: none;
+}
+
+.simple-capsule-detail .capsule-category-summary > button {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.simple-capsule-detail .capsule-detail-actions {
+  flex: 0 0 auto !important;
+}
+
+.simple-capsule-detail .capsule-detail-actions button {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.simple-capsule-detail > .capsule-baggage-tabs {
+  min-height: 34px;
+  padding-bottom: 3px;
+}
+
+.simple-capsule-detail > .capsule-baggage-tabs button {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+@media (max-width: 800px) {
+  .capsule-detail-content:has(> .simple-capsule-composition) {
+    overflow-y: auto;
+  }
+
+  .simple-capsule-composition {
+    height: auto;
+  }
+
+  .simple-capsule-tiers {
+    grid-template-rows: repeat(3, 210px);
+  }
+
+  .simple-capsule-tier {
+    grid-template-columns: 105px minmax(0, 1fr);
+  }
+}
+
+.capsule-source-step {
+  display: grid;
+  grid-template-columns: minmax(260px, .6fr) minmax(0, 1.4fr);
+  gap: 16px;
+  min-height: 0;
+}
+
+.capsule-source-start,
+.capsule-source-existing {
+  border: 1px solid #ddd9cf;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.capsule-source-start {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.capsule-source-start > span {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #eef7df;
+}
+
+.capsule-source-start b {
+  font-size: 1.35rem;
+}
+
+.capsule-source-start small {
+  color: #777;
+  font-size: 1rem;
+}
+
+.capsule-source-existing {
+  padding: 20px;
+  overflow: auto;
+}
+
+.capsule-source-existing header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.capsule-source-existing h2 {
+  margin: 2px 0 0;
+}
+
+.capsule-source-existing p,
+.existing-capsule-modal-copy {
+  margin: 0;
+  color: #777;
+}
+
+.existing-capsule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.existing-capsule-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.existing-capsule-card {
+  appearance: none;
+  border: 1px solid #dedbd2;
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s ease, transform .15s ease;
+}
+
+.existing-capsule-card:hover {
+  border-color: #171713;
+  transform: translateY(-1px);
+}
+
+.existing-capsule-preview {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  height: 62px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f2f0ea;
+}
+
+.existing-capsule-preview img,
+.existing-capsule-preview i {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.existing-capsule-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.existing-capsule-copy b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.existing-capsule-copy small {
+  color: #777;
+}
+
+.capsule-source-empty {
+  padding: 32px;
+  border: 1px dashed #d7d3c8;
+  border-radius: 14px;
+  text-align: center;
+  color: #777;
+}
+
+.capsule-seed-actions > div {
+  display: flex;
+  gap: 10px;
+}
+
+@media (min-width: 901px) {
+  .capsule-create-flow.capsule-stage-source {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .capsule-create-flow.capsule-stage-source:has(> .travel-weather-summary) {
+    grid-template-rows: auto 58px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1000px) {
+  .existing-capsule-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .capsule-source-step {
+    grid-template-columns: 1fr;
+  }
+
+  .existing-capsule-grid,
+  .existing-capsule-grid.compact {
+    grid-template-columns: 1fr;
+  }
+}

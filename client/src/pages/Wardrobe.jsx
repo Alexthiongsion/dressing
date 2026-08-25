@@ -37,6 +37,7 @@ export default function Wardrobe() {
   const [showCapsuleWizard, setShowCapsuleWizard] = useState(false);
   const [imageFile, setImageFile] = useState(undefined);
   const [saving, setSaving] = useState(false);
+  const [categorySaving, setCategorySaving] = useState(false);
   const [seasonSaving, setSeasonSaving] = useState(false);
   const [displaySaving, setDisplaySaving] = useState(false);
   const [error, setError] = useState("");
@@ -107,7 +108,9 @@ useEffect(() => () => window.clearTimeout(imageDisplaySaveRef.current), []);
     setError("");
     setCompatibilityTarget(null);
     try {
-      const allItems = catalogCacheRef.current || await api("/clothes");
+      // Les imports et changements de catégorie doivent être visibles sans
+      // attendre une réouverture de la page.
+      const allItems = await api("/clothes");
       catalogCacheRef.current = allItems;
       setCompatibilityItems(allItems);
       if (!allItems.some(item => !item.compatibilityConfigured)) {
@@ -123,7 +126,7 @@ useEffect(() => () => window.clearTimeout(imageDisplaySaveRef.current), []);
     if (!target?._id) return;
     setError("");
     try {
-      const allItems = compatibilityCatalog.length ? compatibilityCatalog : catalogCacheRef.current || await api("/clothes");
+      const allItems = await api("/clothes");
       catalogCacheRef.current = allItems;
       const freshTarget = allItems.find(item => item._id === target._id) || target;
       setCompatibilityItems(allItems);
@@ -192,6 +195,24 @@ useEffect(() => () => window.clearTimeout(imageDisplaySaveRef.current), []);
       setEditing(current => ({ ...current, season: previousSeasons }));
       setError(err.message);
     } finally { setSeasonSaving(false); }
+  };
+  const changeEditingCategory = async nextCategory => {
+    if (!editing?._id || categorySaving || editing.category === nextCategory) return;
+    const itemId = editing._id;
+    const previousCategory = editing.category;
+    setEditing(current => current?._id === itemId ? { ...current, category: nextCategory } : current);
+    setCategorySaving(true);
+    setError("");
+    try {
+      const updatedItem = await api(`/clothes/${itemId}`, { method: "PUT", body: JSON.stringify({ category: nextCategory }) });
+      setEditing(current => current?._id === itemId ? { ...current, ...updatedItem } : current);
+      setItems(current => current.map(item => item._id === itemId ? { ...item, ...updatedItem } : item));
+      setCompatibilityCatalog(current => current.map(item => item._id === itemId ? { ...item, ...updatedItem } : item));
+      catalogCacheRef.current = null;
+    } catch (err) {
+      setEditing(current => current?._id === itemId ? { ...current, category: previousCategory } : current);
+      setError(err.message);
+    } finally { setCategorySaving(false); }
   };
   const updateImageDisplay = (changes, { immediate = false } = {}) => {
     if (!editing?._id) return;
@@ -309,7 +330,7 @@ useEffect(() => () => window.clearTimeout(imageDisplaySaveRef.current), []);
   {editing&&<Modal title={editing._id?(editing.name || editing.category || "Vêtement"):"Ajouter un vêtement"} onClose={()=>setEditing(null)}><form className={`form-grid ${editing._id ? "clothing-details-form" : ""}`} onSubmit={save}>
     {editing._id ? <section className="clothing-details-summary full">
       {editing.imageUrl ? <NormalizedClothingImage item={editing} alt={editing.name || editing.category}/> : <span/>}
-      <div><span className="eyebrow">{editing.category}</span><h3>{editing.name || editing.category}</h3>{[editing.brand, editing.color, editing.style, editing.size].filter(Boolean).length > 0 && <p>{[editing.brand, editing.color, editing.style, editing.size].filter(Boolean).join(" · ")}</p>}</div>
+      <div><label className="clothing-category-control"><span>Catégorie {categorySaving && <small>Enregistrement…</small>}</span><select value={editing.category || "Haut"} disabled={categorySaving} onChange={event => changeEditingCategory(event.target.value)} aria-label="Catégorie du vêtement">{categories.map(category => <option key={category} value={category}>{category}</option>)}</select></label><h3>{editing.name || editing.category}</h3>{[editing.brand, editing.color, editing.style, editing.size].filter(Boolean).length > 0 && <p>{[editing.brand, editing.color, editing.style, editing.size].filter(Boolean).join(" · ")}</p>}</div>
     </section> : <><ImageDropzone initialUrl={editing.imageUrl} onChange={setImageFile}/>
     <label>Nom<input name="name" defaultValue={editing.name} /></label><label>Catégorie<select name="category" defaultValue={editing.category}>{categories.map(x=><option key={x}>{x}</option>)}</select></label><label>Marque<input name="brand" defaultValue={editing.brand}/></label><label>Couleur<input name="color" defaultValue={editing.color}/></label><label>Style<input name="style" defaultValue={editing.style}/></label><label>Taille<input name="size" defaultValue={editing.size}/></label></>}
     {editing._id && <section className="clothing-image-editor full"><header><div><span className="eyebrow">Affichage</span><h3>Taille et position de l’image</h3></div><button type="button" className="secondary compact" onClick={() => updateImageDisplay(defaultImageDisplay, { immediate: true })}><RotateCcw size={15}/> Réinitialiser</button></header><div className="clothing-image-editor-body"><div className="clothing-image-preview"><NormalizedClothingImage item={editing} alt={editing.name || editing.category}/></div><div className="clothing-image-controls"><label>Taille <output>{Math.round((editing.imageDisplay?.scale || 1) * 100)} %</output><input type="range" min="60" max="180" step="2" value={(editing.imageDisplay?.scale || 1) * 100} onChange={event => updateImageDisplay({ scale: Number(event.target.value) / 100 })}/></label><label>Horizontal <output>{editing.imageDisplay?.offsetX || 0}</output><input type="range" min="-40" max="40" step="1" value={editing.imageDisplay?.offsetX || 0} onChange={event => updateImageDisplay({ offsetX: Number(event.target.value) })}/></label><label>Vertical <output>{editing.imageDisplay?.offsetY || 0}</output><input type="range" min="-40" max="40" step="1" value={editing.imageDisplay?.offsetY || 0} onChange={event => updateImageDisplay({ offsetY: Number(event.target.value) })}/></label>{displaySaving && <small>Enregistrement…</small>}</div></div></section>}

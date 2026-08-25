@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, CloudRain, Link2, Lock, Luggage, Minus, Plus, RefreshCw, RotateCcw, Settings2, Sparkles, Thermometer, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, CloudRain, Layers3, Link2, Lock, Luggage, Minus, Plus, RefreshCw, RotateCcw, Settings2, Sparkles, Thermometer, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { api } from "../services/api";
 import { areCompatible, completeOutfit } from "../utils/outfitSuggestions";
@@ -90,11 +90,12 @@ export default function CapsuleCreate() {
   const [outfits, setOutfits] = useState(initialDraft?.outfits || []), [generation, setGeneration] = useState(initialDraft?.generation || 0), [saving, setSaving] = useState(false), [error, setError] = useState("");
   const [destinations, setDestinations] = useState(initialDraft?.destinations?.length ? initialDraft.destinations : [emptyDestination()]);
   const [recentLocations, setRecentLocations] = useState([]);
+  const [availableCapsules, setAvailableCapsules] = useState([]);
+  const [capsulePickerOpen, setCapsulePickerOpen] = useState(false);
   const [weather, setWeather] = useState(initialDraft?.weather || null), [weatherLoading, setWeatherLoading] = useState(false);
   const [workshopLocks, setWorkshopLocks] = useState(initialDraft?.workshopLocks || []);
   const [workshopPage, setWorkshopPage] = useState(0);
   const [seedPage, setSeedPage] = useState(0);
-  const [suggestionPage, setSuggestionPage] = useState(0);
   const [requirementOverrides, setRequirementOverrides] = useState(initialDraft?.requirementOverrides || {});
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
@@ -116,11 +117,17 @@ export default function CapsuleCreate() {
   useEffect(() => {
     const controller = new AbortController();
     api("/collections", { signal: controller.signal }).then(collections => {
-    const used = collections.flatMap(collection => collection.travel?.destinations?.length ? collection.travel.destinations : collection.travel?.destination ? [collection.travel] : []).filter(location => location?.destination && location.latitude != null && location.longitude != null).map(location => ({ id: `recent-${location.latitude}-${location.longitude}`, label: location.destination, name: location.destination, country: "", latitude: location.latitude, longitude: location.longitude, timezone: location.timezone || "auto", recent: true }));
-    setRecentLocations([...new Map(used.map(location => [`${location.label}-${location.latitude}-${location.longitude}`, location])).values()].slice(0, 8));
-    }).catch(() => { if (!controller.signal.aborted) setRecentLocations([]); });
+      const used = collections.flatMap(collection => collection.travel?.destinations?.length ? collection.travel.destinations : collection.travel?.destination ? [collection.travel] : []).filter(location => location?.destination && location.latitude != null && location.longitude != null).map(location => ({ id: `recent-${location.latitude}-${location.longitude}`, label: location.destination, name: location.destination, country: "", latitude: location.latitude, longitude: location.longitude, timezone: location.timezone || "auto", recent: true }));
+      setRecentLocations([...new Map(used.map(location => [`${location.label}-${location.latitude}-${location.longitude}`, location])).values()].slice(0, 8));
+      setAvailableCapsules(collections.filter(collection => String(collection._id) !== String(editingCapsuleId)));
+    }).catch(() => {
+      if (!controller.signal.aborted) {
+        setRecentLocations([]);
+        setAvailableCapsules([]);
+      }
+    });
     return () => controller.abort();
-  }, []);
+  }, [editingCapsuleId]);
   useEffect(() => {
     const dirty = capsuleMode !== "travel" || stage !== "count" || count !== 3 || name || selected.length || destinations.some(destination => destination.query || destination.startDate || destination.endDate);
     if (!dirty) { localStorage.removeItem(draftKey); return; }
@@ -187,7 +194,7 @@ export default function CapsuleCreate() {
   const coverageRatios = [freshTopCount / requiredTops, bottomCount / requiredBottoms, shoeCount / requiredShoes]
     .map(value => Number.isFinite(value) ? Math.max(0, value) : 0);
   const coverageRatio = Math.min(1, ...coverageRatios);
-  const calculatedCoveredDays = possibleOutfitCount > 0 ? Math.floor(tripDays * coverageRatio) : 0;
+  const calculatedCoveredDays = Math.floor(tripDays * coverageRatio);
   const coveredDays = Number.isFinite(calculatedCoveredDays) ? Math.max(0, Math.min(tripDays, calculatedCoveredDays)) : 0;
   const coveragePercent = tripDays > 0 ? Math.round((coveredDays / tripDays) * 100) : 0;
   const coverageBlockers = [
@@ -229,17 +236,18 @@ export default function CapsuleCreate() {
     });
     return [...alreadyIncluded, ...candidates];
   }, [clothes, included, includedItems, suggestionCategory, suggestionSeason, suggestionSort, selectedItems]);
-  const suggestionPageCount = Math.max(1, Math.ceil(suggestions.length / 10));
-  const visibleSuggestions = suggestions.slice(suggestionPage * 10, suggestionPage * 10 + 10);
-  useEffect(() => { setSuggestionPage(0); }, [suggestionCategory, suggestionSeason, suggestionSort]);
-  useEffect(() => { setSuggestionPage(current => Math.min(current, suggestionPageCount - 1)); }, [suggestionPageCount]);
+  const scrollSuggestionsHorizontally = event => {
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.currentTarget.scrollLeft += event.deltaY;
+    event.preventDefault();
+  };
 
   const updateDestination = (index, destination) => setDestinations(current => current.map((value, valueIndex) => valueIndex === index ? destination : value));
   const analyzeTrip = async () => {
     if (capsuleMode === "simple") {
       setWeather(null);
       setError("");
-      setStage("select");
+      setStage(editingCapsuleId ? "select" : "source");
       return;
     }
     setWeatherLoading(true);
@@ -256,10 +264,29 @@ export default function CapsuleCreate() {
       setError("Météo indisponible pour ces dates. La capsule utilise la saison estimée et reste entièrement modifiable.");
     } finally {
       setWeatherLoading(false);
-      setStage("select");
+      setStage(editingCapsuleId ? "select" : "source");
     }
   };
   const toggleSelected = item => setSelected(current => current.includes(item._id) ? current.filter(id => id !== item._id) : [...current, item._id]);
+  const capsuleClothingIds = capsule => [...new Set([
+    ...(capsule.clothes || []),
+    ...(capsule.outfits || []).flatMap(outfit => outfit.clothes || outfit.items || [])
+  ].map(item => String(item?._id || item)).filter(id => clothes.some(clothing => String(clothing._id) === id)))];
+  const importableCapsules = availableCapsules.filter(capsule => capsuleClothingIds(capsule).length);
+  const importCapsule = capsule => {
+    const ids = capsuleClothingIds(capsule);
+    if (!ids.length) {
+      setError("Cette capsule ne contient aucune pièce disponible dans la garde-robe.");
+      return;
+    }
+    const mergeIds = current => [...new Set([...current.map(String), ...ids])];
+    setSelected(mergeIds);
+    setIncluded(mergeIds);
+    setSelectionBaseline(mergeIds);
+    setCapsulePickerOpen(false);
+    setError("");
+    setStage("select");
+  };
   const toggleIncluded = id => setIncluded(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]);
   const openCompletion = () => {
     setIncluded(current => {
@@ -315,55 +342,49 @@ export default function CapsuleCreate() {
     const items = makeOutfit(generation, seedIds);
     setGeneration(value => value + 1); setWorkshopPage(Math.floor(outfits.length / 4)); setOutfits(current => [...current, { id: `${Date.now()}-new`, name: `Tenue ${current.length + 1}`, items }]);
   };
-  const save = async (outfitsToSave = outfits) => {
-    if (capsuleMode === "simple") {
-      const clothesToSave = included.length ? included : selected;
-      if (!clothesToSave.length) return setError("Ajoutez au moins une pièce à la capsule.");
-      if (!simpleMinimumMet) return setError(`Ajoutez au minimum ${missingSimpleCategories.map(value => value === "Haut" ? "un haut" : value === "Bas" ? "un bas" : "une paire de chaussures").join(" · ")}.`);
-      const capsuleName = name.trim() || "Ma capsule";
-      if (!name.trim()) setName(capsuleName);
-      setSaving(true);
-      try {
-        const path = editingCapsuleId ? `/collections/${editingCapsuleId}/capsule` : "/collections/capsule/generated";
-        await api(path, { method: editingCapsuleId ? "PUT" : "POST", body: JSON.stringify({ name: capsuleName, capsuleMode, season, targetPieces, clothes: clothesToSave, outfits: [] }) });
-        localStorage.removeItem(draftKey);
-        navigate(editingCapsuleId ? `/capsules/${editingCapsuleId}` : "/capsules");
-      } catch (err) { setError(err.message); setSaving(false); }
-      return;
-    }
-    if (!outfitsToSave.length) return setError("Aucune tenue compatible ne peut être enregistrée.");
+  const save = async () => {
+    const clothesToSave = included.length ? included : selected;
+    if (!clothesToSave.length) return setError("Ajoutez au moins une pièce à la capsule.");
+    if (capsuleMode === "simple" && !simpleMinimumMet) return setError(`Ajoutez au minimum ${missingSimpleCategories.map(value => value === "Haut" ? "un haut" : value === "Bas" ? "un bas" : "une paire de chaussures").join(" · ")}.`);
+    if (capsuleMode === "travel" && coverageBlockers.length) return setError(`Ajoutez au minimum ${coverageBlockers.join(" · ")}.`);
     const destinationNames = destinations.map(destination => destination.destination).filter(Boolean);
-    const capsuleName = name.trim() || (destinationNames.length ? `Voyage · ${destinationNames.join(" · ")}` : "Ma capsule voyage");
+    const capsuleName = name.trim() || (capsuleMode === "travel" && destinationNames.length ? `Voyage · ${destinationNames.join(" · ")}` : "Ma capsule");
     if (!name.trim()) setName(capsuleName);
     setSaving(true);
-    const clothesToSave = included.length ? included : selected;
-    const payload = { name: capsuleName, capsuleMode, season, clothes: clothesToSave, travel: capsuleMode === "travel" ? travel : undefined, weather: capsuleMode === "travel" ? weather : undefined, packingRequirements: { tops: requiredTops, bottoms: requiredBottoms, shoes: requiredShoes, inters: requiredInters, coats: requiredCoats }, outfits: outfitsToSave.map(outfit => ({ name: `${capsuleName} · ${outfit.name}`, clothes: outfit.items.map(item => item._id) })) };
+    const payload = { name: capsuleName, capsuleMode, season, targetPieces, clothes: clothesToSave, travel: capsuleMode === "travel" ? travel : undefined, weather: capsuleMode === "travel" ? weather : undefined, packingRequirements: capsuleMode === "travel" ? { tops: requiredTops, bottoms: requiredBottoms, shoes: requiredShoes, inters: requiredInters, coats: requiredCoats } : undefined, outfits: [] };
     const path = editingCapsuleId ? `/collections/${editingCapsuleId}/capsule` : "/collections/capsule/generated";
     try { await api(path, { method: editingCapsuleId ? "PUT" : "POST", body: JSON.stringify(payload) }); localStorage.removeItem(draftKey); navigate(editingCapsuleId ? `/capsules/${editingCapsuleId}` : "/capsules"); }
     catch (err) { setError(err.message); setSaving(false); }
   };
-  const saveFromCompletion = () => {
-    if (capsuleMode === "simple") { save([]); return; }
-    const proposals = buildProposals();
-    if (!proposals.length) return setError("Aucune tenue compatible ne peut être enregistrée avec cette sélection.");
-    const generatedOutfits = proposals.map((items, index) => ({ id: `${Date.now()}-${index}`, name: `Tenue ${index + 1}`, items }));
-    setOutfits(generatedOutfits);
-    setError("");
-    save(generatedOutfits);
-  };
-  const titles = { count: "Créer une capsule", select: "Choisissez vos pièces de départ", suggest: "Complétez votre capsule", workshop: "Bilan de la capsule" };
+  const saveFromCompletion = () => save();
+  const titles = { count: "Créer une capsule", source: "Construisez votre capsule", select: "Choisissez vos pièces de départ", suggest: "Complétez votre capsule", workshop: "Bilan de la capsule" };
   const goBack = () => {
     setError("");
     if (stage === "count") navigate("/capsules");
-    else setStage(stage === "workshop" ? "suggest" : stage === "suggest" ? "select" : "count");
+    else if (stage === "source") setStage("count");
+    else if (stage === "select") setStage(editingCapsuleId ? "count" : "source");
+    else if (stage === "suggest") setStage("select");
+    else setStage("suggest");
   };
   const startNewCapsule = () => { localStorage.removeItem(draftKey); window.location.reload(); };
+  const renderCapsuleLibrary = compact => <div className={`existing-capsule-grid${compact ? " compact" : ""}`}>
+    {importableCapsules.map(capsule => {
+      const ids = capsuleClothingIds(capsule);
+      const preview = ids.slice(0, 4).map(id => clothes.find(item => String(item._id) === id)).filter(Boolean);
+      return <button type="button" className="existing-capsule-card" key={capsule._id} onClick={() => importCapsule(capsule)}>
+        <span className="existing-capsule-preview">{preview.map(item => item.imageUrl ? <img key={item._id} src={item.imageUrl} alt=""/> : <i key={item._id}/>)}</span>
+        <span className="existing-capsule-copy"><b>{capsule.name || "Capsule sans nom"}</b><small>{ids.length} pièce{ids.length > 1 ? "s" : ""}</small></span>
+        <Plus size={18}/>
+      </button>;
+    })}
+  </div>;
 
   if (catalogLoading) return <PageState loading title="Chargement de votre garde-robe…"/>;
   if (catalogError) return <PageState title="La création de capsule n’est pas disponible" message={catalogError} onAction={() => loadCatalog()}/>;
 
   return <div className={`capsule-create-flow capsule-stage-${stage} capsule-mode-${capsuleMode}`}>
     {draftPromptOpen && <Modal title="Un brouillon est en cours" onClose={() => setDraftPromptOpen(false)}><div className="draft-choice"><p>Vous avez une capsule non terminée. Voulez-vous reprendre là où vous vous êtes arrêté ou repartir de zéro&nbsp;?</p><div><button type="button" className="secondary" onClick={startNewCapsule}><Plus size={17}/> Créer une nouvelle capsule</button><button type="button" className="primary" onClick={() => setDraftPromptOpen(false)}><RotateCcw size={17}/> Reprendre le brouillon</button></div></div></Modal>}
+    {capsulePickerOpen && <Modal title="Ajouter une capsule existante" onClose={() => setCapsulePickerOpen(false)}><p className="existing-capsule-modal-copy">Ses pièces seront ajoutées à votre sélection actuelle.</p>{importableCapsules.length ? renderCapsuleLibrary(true) : <div className="capsule-source-empty">Aucune autre capsule disponible.</div>}</Modal>}
     <header className="page-header"><div><span className="eyebrow">{capsuleMode === "travel" ? "Capsule voyage" : "Capsule"}</span><h1>{titles[stage]}</h1></div><div className="capsule-header-actions">{draftRestored && !draftPromptOpen && <span className="draft-restored"><Check size={14}/> Brouillon restauré</span>}{stage === "select" && selected.length > 0 && <button type="button" className="secondary capsule-reset-selection" onClick={() => { setSelected([]); setIncluded([]); setSelectionBaseline([]); setCategory(""); setError(""); }}><RotateCcw size={16}/> Réinitialiser</button>}<button className="secondary" onClick={goBack}><ArrowLeft size={18}/> Retour</button></div></header>
     {stage !== "count" && weather && <section className="travel-weather-summary itinerary-summary"><div><span className="eyebrow">{weather.type === "forecast" ? "Prévisions détaillées" : weather.type === "historical" ? "Météo observée" : "Tendances saisonnières estimatives"}</span><h3>{weather.locations?.map(location => location.destination).join(" · ")}</h3><p>{weather.locations?.length} étape{weather.locations?.length > 1 ? "s" : ""} analysée{weather.locations?.length > 1 ? "s" : ""}</p></div>{weatherSummary && <div><strong>{weatherSummary.min}° à {weatherSummary.max}°</strong><span>{weatherSummary.rainDays} jour(s) potentiellement pluvieux</span></div>}<div className="itinerary-weather-locations">{weather.locations?.map(location => { const summary = summarizeTravelWeather(location); return <span key={`${location.destination}-${location.daily?.[0]?.date}`}><b>{location.destination}</b>{summary?.min}° / {summary?.max}°</span>; })}</div></section>}
 
@@ -377,12 +398,23 @@ export default function CapsuleCreate() {
         <div className="travel-itinerary">{destinations.map((destination, index) => <DestinationField key={destination.id} destination={destination} index={index} canRemove={destinations.length > 1} recentLocations={reusableLocations} onChange={value => updateDestination(index, value)} onRemove={() => setDestinations(current => current.filter((_, valueIndex) => valueIndex !== index))}/>)}</div>
         <button type="button" className="secondary add-destination" onClick={() => setDestinations(current => [...current, emptyDestination()])}><Plus size={16}/> Ajouter une destination ou une escale</button>
       </> : <><div className="simple-capsule-settings"><p>Choisissez une saison pour adapter les pièces proposées.</p><div className="outfit-filter-row"><span>Saison</span><div className="category-pills"><button type="button" className={!season ? "active" : ""} onClick={() => setSeason("")}>Toutes</button>{seasons.map(value => <button type="button" key={value} className={season === value ? "active" : ""} onClick={() => setSeason(value)}>{value}</button>)}</div></div></div><div className="trip-count simple-piece-target"><button type="button" aria-label="Réduire l’objectif de pièces" onClick={() => setTargetPieces(value => Math.max(1, value - 1))}><Minus/></button><strong>{targetPieces}</strong><button type="button" aria-label="Augmenter l’objectif de pièces" onClick={() => setTargetPieces(value => Math.min(100, value + 1))}><Plus/></button><span>pièces cible</span></div></>}
-      {capsuleMode === "travel" && <div className="trip-count"><button type="button" aria-label="Retirer une tenue" onClick={() => setCount(value => Math.max(1, value - 1))}><Minus/></button><strong>{count}</strong><button type="button" aria-label="Ajouter une tenue" onClick={() => setCount(value => Math.min(20, value + 1))}><Plus/></button><span>tenue{count > 1 ? "s" : ""}</span></div>}
       <button type="button" className="primary" disabled={(capsuleMode === "travel" && !itineraryIsValid) || weatherLoading} onClick={analyzeTrip}>{capsuleMode === "travel" && weatherLoading ? `Analyse de ${destinations.length} étape${destinations.length > 1 ? "s" : ""}…` : capsuleMode === "travel" ? "Analyser et commencer" : "Commencer"}<ChevronRight size={18}/></button>
       {error && <p className="field-error">{error}</p>}
     </section>}
 
-    {stage === "select" && <><section className="capsule-create-settings"><label>Nom de la capsule<input value={name} onChange={event => setName(event.target.value)} placeholder={capsuleMode === "travel" ? "Ex. Voyage en Allemagne" : "Ex. Capsule été"}/></label><div className="outfit-filter-row"><span>Saison</span><div className="category-pills"><button className={!season ? "active" : ""} onClick={() => setSeason("")}>Toutes</button>{seasons.map(value => <button key={value} className={season === value ? "active" : ""} onClick={() => setSeason(value)}>{value}</button>)}</div></div><div className="outfit-filter-row"><span>Catégorie</span><div className="category-pills"><button className={!category ? "active" : ""} onClick={() => setCategory("")}>Tout</button>{categories.map(value => <button key={value} className={category === value ? "active" : ""} onClick={() => setCategory(value)}>{value}</button>)}</div></div></section><section className="capsule-seed-library"><div className="capsule-seed-grid">{visibleSeedItems.map(item => <button type="button" key={item._id} className={selected.includes(item._id) ? "selected" : ""} aria-label={`${selected.includes(item._id) ? "Retirer" : "Sélectionner"} ${item.name || item.category}`} title={item.name || item.category} onClick={() => toggleSelected(item)}>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span/>}{selected.includes(item._id) && <i><Lock size={16}/></i>}</button>)}</div>{seedPageCount > 1 && <nav className="completion-pagination" aria-label="Pages de vêtements de départ"><button type="button" aria-label="Page précédente" onClick={() => setSeedPage(value => (value - 1 + seedPageCount) % seedPageCount)}><ChevronLeft size={18}/></button><span>{seedPage + 1} / {seedPageCount}</span><button type="button" aria-label="Page suivante" onClick={() => setSeedPage(value => (value + 1) % seedPageCount)}><ChevronRight size={18}/></button></nav>}</section><footer className="capsule-seed-actions"><span><b>{selected.length}</b>{capsuleMode === "simple" ? ` / ${targetPieces} pièces` : ` sélectionnée${selected.length > 1 ? "s" : ""}`}</span>{error && <p className="field-error">{error}</p>}<button className="primary" disabled={!selected.length} onClick={openCompletion}><Sparkles size={18}/> Compléter la capsule</button></footer></>}
+    {stage === "source" && <section className="capsule-source-step">
+      <button type="button" className="capsule-source-start" onClick={() => setStage("select")}>
+        <span><Plus size={24}/></span>
+        <b>Partir de ma garde-robe</b>
+        <small>Choisissez librement les pièces de votre nouvelle capsule.</small>
+      </button>
+      <div className="capsule-source-existing">
+        <header><div><span className="eyebrow">Capsules existantes</span><h2>Importer une base</h2></div><p>Les pièces importées restent modifiables ensuite.</p></header>
+        {importableCapsules.length ? renderCapsuleLibrary(false) : <div className="capsule-source-empty">Aucune capsule existante à importer.</div>}
+      </div>
+    </section>}
+
+    {stage === "select" && <><section className="capsule-create-settings"><label>Nom de la capsule<input value={name} onChange={event => setName(event.target.value)} placeholder={capsuleMode === "travel" ? "Ex. Voyage en Allemagne" : "Ex. Capsule été"}/></label><div className="outfit-filter-row"><span>Saison</span><div className="category-pills"><button className={!season ? "active" : ""} onClick={() => setSeason("")}>Toutes</button>{seasons.map(value => <button key={value} className={season === value ? "active" : ""} onClick={() => setSeason(value)}>{value}</button>)}</div></div><div className="outfit-filter-row"><span>Catégorie</span><div className="category-pills"><button className={!category ? "active" : ""} onClick={() => setCategory("")}>Tout</button>{categories.map(value => <button key={value} className={category === value ? "active" : ""} onClick={() => setCategory(value)}>{value}</button>)}</div></div></section><section className="capsule-seed-library"><div className="capsule-seed-grid">{visibleSeedItems.map(item => <button type="button" key={item._id} className={selected.includes(item._id) ? "selected" : ""} aria-label={`${selected.includes(item._id) ? "Retirer" : "Sélectionner"} ${item.name || item.category}`} title={item.name || item.category} onClick={() => toggleSelected(item)}>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span/>}{selected.includes(item._id) && <i><Lock size={16}/></i>}</button>)}</div>{seedPageCount > 1 && <nav className="completion-pagination" aria-label="Pages de vêtements de départ"><button type="button" aria-label="Page précédente" onClick={() => setSeedPage(value => (value - 1 + seedPageCount) % seedPageCount)}><ChevronLeft size={18}/></button><span>{seedPage + 1} / {seedPageCount}</span><button type="button" aria-label="Page suivante" onClick={() => setSeedPage(value => (value + 1) % seedPageCount)}><ChevronRight size={18}/></button></nav>}</section><footer className="capsule-seed-actions"><span><b>{selected.length}</b>{capsuleMode === "simple" ? ` / ${targetPieces} pièces` : ` sélectionnée${selected.length > 1 ? "s" : ""}`}</span>{error && <p className="field-error">{error}</p>}<div><button type="button" className="secondary" disabled={!importableCapsules.length} onClick={() => setCapsulePickerOpen(true)}><Layers3 size={17}/> Ajouter une capsule</button><button className="primary" disabled={!selected.length} onClick={openCompletion}><Sparkles size={18}/> Compléter la capsule</button></div></footer></>}
 
     {stage === "suggest" && <>
       <section className="capsule-completion-minimal">
@@ -390,10 +422,9 @@ export default function CapsuleCreate() {
           <div className="completion-trip"><b>{capsuleMode === "simple" ? "Capsule thématique" : `${tripDays} jours · ${weather?.locations?.length || 1} destination${weather?.locations?.length > 1 ? "s" : ""}`}</b>{capsuleMode === "simple" ? <span>{season || "Toutes saisons"}</span> : weatherSummary && <span>{weatherSummary.min}° à {weatherSummary.max}° · {weatherSummary.rainDays} j. de pluie</span>}</div>
           {capsuleMode === "simple" && <div className="simple-target-progress"><span><strong>{included.length}</strong> / {targetPieces} pièces</span><div><button type="button" aria-label="Réduire l’objectif de pièces" onClick={() => setTargetPieces(value => Math.max(1, value - 1))}><Minus size={15}/></button><button type="button" aria-label="Augmenter l’objectif de pièces" onClick={() => setTargetPieces(value => Math.min(100, value + 1))}><Plus size={15}/></button></div><i><span style={{ width: `${Math.min(100, Math.round((included.length / targetPieces) * 100))}%` }}/></i>{simpleMinimumMet ? <small className="minimum-complete"><Check size={14}/> Base complète</small> : <small className="minimum-missing">Minimum : {missingSimpleCategories.join(" · ")}</small>}</div>}
           {capsuleMode === "travel" && <div className="completion-progress"><strong><span className="completion-days-number">{String(coveredDays)}</span><small>/{tripDays}</small></strong><span>jours couverts</span><i><span style={{ width: `${coveragePercent}%` }}/></i>{coverageBlockers.length > 0 && <p>Ajoutez {coverageBlockers.join(" + ")} pour former une première tenue complète.</p>}</div>}
-          <div className="completion-sidebar-total"><b>{included.length} pièces</b><span>{possibleOutfitCount} combinaisons possibles</span></div>
+          <div className="completion-sidebar-total"><b>{included.length} pièces dans la capsule</b></div>
           <div className="completion-next">
-            <button className="primary" disabled={saving || (capsuleMode === "travel" ? !possibleOutfitCount : !included.length || !simpleMinimumMet)} onClick={saveFromCompletion}><Check size={19}/>{saving ? "Enregistrement…" : "Enregistrer la capsule"}</button>
-            {capsuleMode === "travel" && <button className="secondary" disabled={saving || !possibleOutfitCount} onClick={generate}><Sparkles size={18}/> Analyser la capsule</button>}
+            <button className="primary" disabled={saving || !included.length || (capsuleMode === "travel" ? coverageBlockers.length > 0 : !simpleMinimumMet)} onClick={saveFromCompletion}><Check size={19}/>{saving ? "Enregistrement…" : "Enregistrer la capsule"}</button>
             {error && <small className="field-error">{error}</small>}
           </div>
           {capsuleMode === "travel" && <div className="completion-needs"><RequirementTarget label="Hauts" current={freshTopCount} target={requiredTops} min={1} active={suggestionCategory === "Haut"} onSelect={() => setSuggestionCategory("Haut")} onChange={value => setRequirementOverrides(current => ({ ...current, tops: value }))}/><RequirementTarget label="Bas" current={bottomCount} target={requiredBottoms} min={1} active={suggestionCategory === "Bas"} onSelect={() => setSuggestionCategory("Bas")} onChange={value => setRequirementOverrides(current => ({ ...current, bottoms: value }))}/><RequirementTarget label="Chaussures" current={shoeCount} target={requiredShoes} min={1} active={suggestionCategory === "Chaussures"} onSelect={() => setSuggestionCategory("Chaussures")} onChange={value => setRequirementOverrides(current => ({ ...current, shoes: value }))}/><RequirementTarget label="Inters" current={interCount} target={requiredInters} active={suggestionCategory === "Inter"} onSelect={() => setSuggestionCategory("Inter")} onChange={value => setRequirementOverrides(current => ({ ...current, inters: value }))}/><RequirementTarget label="Manteaux" current={coatCount} target={requiredCoats} active={suggestionCategory === "Manteau"} onSelect={() => setSuggestionCategory("Manteau")} onChange={value => setRequirementOverrides(current => ({ ...current, coats: value }))}/></div>}
@@ -401,8 +432,7 @@ export default function CapsuleCreate() {
         </aside>
         <section className="capsule-suggestions completion-library-minimal">
           <div className="completion-filter-groups"><div className="outfit-filter-row"><span>Catégorie</span><div className="category-pills"><button className={!suggestionCategory ? "active" : ""} onClick={() => setSuggestionCategory("")}>Tout</button>{categories.map(value => <button key={value} className={suggestionCategory === value ? "active" : ""} onClick={() => setSuggestionCategory(value)}>{value}</button>)}</div></div><div className="outfit-filter-row"><span>Saison</span><div className="category-pills"><button className={!suggestionSeason ? "active" : ""} onClick={() => setSuggestionSeason("")}>Toutes</button>{seasons.map(value => <button key={value} className={suggestionSeason === value ? "active" : ""} onClick={() => setSuggestionSeason(value)}>{value}</button>)}</div></div><div className="suggestion-sort"><button type="button" className={suggestionSort === "more" ? "active" : ""} aria-pressed={suggestionSort === "more"} onClick={() => setSuggestionSort(current => current === "more" ? "" : "more")}>Plus compatibles</button><button type="button" className={suggestionSort === "less" ? "active" : ""} aria-pressed={suggestionSort === "less"} onClick={() => setSuggestionSort(current => current === "less" ? "" : "less")}>Moins compatibles</button></div></div>
-          <div className="suggestion-carousel">{visibleSuggestions.map(({ item }) => <button type="button" key={item._id} className={`suggestion-tile ${included.includes(item._id) ? "selected" : ""}`} aria-label={`${included.includes(item._id) ? "Retirer" : "Ajouter"} ${item.name || item.category}`} title={item.name || item.category} onClick={() => toggleIncluded(item._id)}>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span/>}{included.includes(item._id) && <i><Check size={16}/></i>}</button>)}</div>
-          {suggestionPageCount > 1 && <nav className="completion-pagination" aria-label="Pages de vêtements"><button type="button" aria-label="Page précédente" onClick={() => setSuggestionPage(value => (value - 1 + suggestionPageCount) % suggestionPageCount)}><ChevronLeft size={18}/></button><span>{suggestionPage + 1} / {suggestionPageCount}</span><button type="button" aria-label="Page suivante" onClick={() => setSuggestionPage(value => (value + 1) % suggestionPageCount)}><ChevronRight size={18}/></button></nav>}
+          <div className="suggestion-carousel" tabIndex="0" aria-label="Pièces disponibles, défilement horizontal" onWheel={scrollSuggestionsHorizontally}>{suggestions.map(({ item }) => <button type="button" key={item._id} className={`suggestion-tile ${included.includes(item._id) ? "selected" : ""}`} aria-label={`${included.includes(item._id) ? "Retirer" : "Ajouter"} ${item.name || item.category}`} title={item.name || item.category} onClick={() => toggleIncluded(item._id)}>{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span/>}{included.includes(item._id) && <i><Check size={16}/></i>}</button>)}</div>
         </section>
       </section>
     </>}
